@@ -1,0 +1,38 @@
+<!--
+    View-model to view mapping.
+
+    The shell hosts pages in a ContentControl bound to the active view model;
+    these templates are what turn that view model into a view. Keeping the
+    mapping here rather than in code means a page is added by declaring it, and
+    the shell never needs to know the set of pages that exist.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+                    xmlns:views="clr-namespace:GameLauncher.Desktop.Views">
+
+    <DataTemplate DataType="{x:Type viewModels:HomeViewModel}">
+        <views:HomeView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:LibraryViewModel}">
+        <views:LibraryView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:GameDetailsViewModel}">
+        <views:GameDetailsView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:CollectionsViewModel}">
+        <views:CollectionsView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:SettingsViewModel}">
+        <views:SettingsView />
+    </DataTemplate>
+
+    <DataTemplate DataType="{x:Type viewModels:FriendsViewModel}">
+        <views:FriendsView />
+    </DataTemplate>
+
+</ResourceDictionary>

@@ -1,0 +1,1035 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>GameLauncher.Relay</name>
+    </assembly>
+    <members>
+        <member name="T:GameLauncher.Relay.Configuration.RelayDatabaseProvider">
+            <summary>
+            Database engines the relay can run against.
+            </summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Configuration.RelayDatabaseProvider.Sqlite">
+            <summary>SQLite. Suitable for self-hosting on a single machine.</summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Configuration.RelayDatabaseProvider.Postgres">
+            <summary>
+            PostgreSQL. The schema and every query already target it; the connection
+            factory is not implemented.
+            </summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Configuration.RelayDatabaseOptions">
+            <summary>
+            Database configuration.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayDatabaseOptions.Provider">
+            <summary>Which engine to connect to.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayDatabaseOptions.ConnectionString">
+            <summary>
+            Provider-specific connection string.
+            </summary>
+            <remarks>
+            Externalised so the same binaries run on a laptop and a VPS. On a VPS this
+            should arrive as the <c>Relay__Database__ConnectionString</c> environment
+            variable rather than in a file.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Configuration.RelayPresenceOptions">
+            <summary>
+            Presence tuning.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayPresenceOptions.HeartbeatSeconds">
+            <summary>
+            How often a connected client is expected to send a heartbeat.
+            </summary>
+            <remarks>
+            Only refreshes last-seen. Disconnects are detected by SignalR itself, so
+            this is not a liveness mechanism and can be generous.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Configuration.RelayOptions">
+            <summary>
+            Root configuration section for the relay, bound from <c>Relay</c>.
+            </summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Configuration.RelayOptions.SectionName">
+            <summary>Name of the configuration section these options bind from.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayOptions.Database">
+            <summary>Database configuration.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayOptions.Presence">
+            <summary>Presence configuration.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Configuration.RelayOptions.AllowedOrigins">
+            <summary>
+            Origins permitted by CORS.
+            </summary>
+            <remarks>
+            Empty by default. The desktop client is not a browser and is unaffected;
+            this exists only for a future web front end, and defaulting to open would
+            be the wrong way round.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.IRelayConnectionFactory">
+            <summary>
+            Opens connections to the relay's database.
+            </summary>
+            <remarks>
+            The single seam between the relay and its database engine. Every query in the
+            service is written in portable SQL, so moving to PostgreSQL means adding one
+            implementation of this interface and changing configuration — nothing else.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.IRelayConnectionFactory.Provider">
+            <summary>Gets the engine this factory connects to.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.IRelayConnectionFactory.OpenAsync(System.Threading.CancellationToken)">
+            <summary>
+            Opens a new connection.
+            </summary>
+            <param name="cancellationToken">Cancels the open.</param>
+            <returns>An open connection the caller owns and must dispose.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.SqliteRelayConnectionFactory">
+            <summary>
+            SQLite <see cref="T:GameLauncher.Relay.Data.IRelayConnectionFactory"/>.
+            </summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.SqliteRelayConnectionFactory.#ctor(Microsoft.Extensions.Options.IOptions{GameLauncher.Relay.Configuration.RelayOptions})">
+            <summary>
+            Initialises a new instance.
+            </summary>
+            <param name="options">Relay configuration supplying the connection string.</param>
+            <exception cref="T:System.ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.SqliteRelayConnectionFactory.Provider">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.SqliteRelayConnectionFactory.OpenAsync(System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.RelayDatabaseInitializer">
+            <summary>
+            Creates and migrates the relay schema.
+            </summary>
+            <remarks>
+            <para>
+            Every statement here is valid on both SQLite and PostgreSQL. Three rules make
+            that possible, and breaking any of them is what would tie the relay to one
+            engine:
+            </para>
+            <list type="number">
+            <item><description>
+            <b>No auto-increment identity columns.</b> This is where the dialects
+            genuinely diverge. Every key is a value the application generates — a friend
+            code, a catalog id, a device id, or a composite of natural keys.
+            </description></item>
+            <item><description>
+            <b>No defaults on boolean or timestamp columns.</b> PostgreSQL rejects
+            <c>DEFAULT 0</c> on a boolean, and the two engines spell "now" differently.
+            Values are always supplied by the application, which is also easier to test.
+            </description></item>
+            <item><description>
+            <b>Only shared column types</b> — <c>TEXT</c>, <c>INTEGER</c>,
+            <c>BOOLEAN</c>, <c>DOUBLE PRECISION</c>. Timestamps are UTC ISO-8601 text,
+            which orders lexicographically exactly as it does chronologically.
+            </description></item>
+            </list>
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Relay.Data.RelayDatabaseInitializer.Migrations">
+            <summary>
+            Ordered migrations. Index + 1 is the version each produces.
+            </summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayDatabaseInitializer.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory,Microsoft.Extensions.Logging.ILogger{GameLauncher.Relay.Data.RelayDatabaseInitializer})">
+            <summary>
+            Initialises a new instance.
+            </summary>
+            <param name="connectionFactory">Supplies connections to migrate.</param>
+            <param name="logger">Logger for migration diagnostics.</param>
+            <exception cref="T:System.ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.RelayDatabaseInitializer.TargetVersion">
+            <summary>Gets the schema version this build expects.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayDatabaseInitializer.InitializeAsync(System.Threading.CancellationToken)">
+            <summary>
+            Creates the database if absent and applies outstanding migrations.
+            </summary>
+            <param name="cancellationToken">Cancels the operation.</param>
+            <returns>A task that completes when the schema is current.</returns>
+            <exception cref="T:System.InvalidOperationException">
+            The database was created by a newer build.
+            </exception>
+        </member>
+        <member name="F:GameLauncher.Relay.Data.RelayDatabaseInitializer.RelayIdKey">
+            <summary>Metadata key holding this relay's instance identity.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayDatabaseInitializer.GetOrCreateRelayIdAsync(System.Threading.CancellationToken)">
+            <summary>
+            Returns this relay's instance identity, generating it on first call.
+            </summary>
+            <param name="cancellationToken">Cancels the operation.</param>
+            <returns>The stable relay identity.</returns>
+            <remarks>
+            Written with <c>ON CONFLICT DO NOTHING</c> and then read back, so two
+            requests racing on a cold start converge on one value rather than each
+            believing it minted the identity.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.RelayTypeHandlers">
+            <summary>
+            Dapper type handlers for the relay's portable storage conventions.
+            </summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayTypeHandlers.Register">
+            <summary>
+            Installs the handlers. Safe to call repeatedly.
+            </summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.RelayTypeHandlers.UtcTimestampHandler">
+            <summary>
+            Stores <see cref="T:System.DateTimeOffset"/> as UTC ISO-8601 text.
+            </summary>
+            <remarks>
+            <para>
+            Normalised to UTC before writing, which is the whole point: a
+            UTC ISO-8601 string sorts lexicographically in exactly the same order as
+            it does chronologically, so <c>MIN</c>, <c>MAX</c> and <c>ORDER BY</c> are
+            correct on both SQLite and PostgreSQL without any conversion.
+            </para>
+            <para>
+            Deliberately different from the desktop client, which keeps the original
+            offset because it displays local times. The relay only ever compares and
+            orders, and preserving offsets there would break lexicographic ordering.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Relay.Data.RelayTypeHandlers.UtcTimestampHandler.Format">
+            <summary>Fixed-width round-trip format; fixed width is what keeps sorting correct.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayTypeHandlers.UtcTimestampHandler.SetValue(System.Data.IDbDataParameter,System.DateTimeOffset)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.RelayTypeHandlers.UtcTimestampHandler.Parse(System.Object)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.IAchievementRepository">
+            <summary>Persistence for synchronised achievement history.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IAchievementRepository.GetForUserAsync(System.String,System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <summary>Gets a user's unlocks for a set of titles.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="catalogIds">The titles of interest.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>Every unlock the relay holds for those titles.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IAchievementRepository.MergeAsync(System.String,System.Collections.Generic.IReadOnlyCollection{GameLauncher.Relay.Data.Repositories.RelayUserAchievement},System.Threading.CancellationToken)">
+            <summary>
+            Merges pushed unlocks into the relay, keeping the earliest time for each.
+            </summary>
+            <param name="friendCode">The user the unlocks belong to.</param>
+            <param name="unlocks">The unlocks being pushed.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>How many unlocks were new or moved the recorded time earlier.</returns>
+            <remarks>
+            Idempotent, which is what makes retrying a batch whose response was lost
+            safe. Earliest-wins means a replay can never move an earned-on date
+            forward, and a second device reporting the same achievement later cannot
+            overwrite the first device's earlier record.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.AchievementRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.IAchievementRepository"/>.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.AchievementRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory,Microsoft.Extensions.Logging.ILogger{GameLauncher.Relay.Data.Repositories.AchievementRepository})">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+            <param name="logger">Logger for sync diagnostics.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.AchievementRepository.GetForUserAsync(System.String,System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.AchievementRepository.MergeAsync(System.String,System.Collections.Generic.IReadOnlyCollection{GameLauncher.Relay.Data.Repositories.RelayUserAchievement},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.ICatalogRepository">
+            <summary>Persistence for the shared game catalog.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.ICatalogRepository.ResolveByFingerprintAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Resolves a fingerprint to its canonical catalog entry.
+            </summary>
+            <param name="fingerprint">The fingerprint to resolve.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The canonical entry, or <see langword="null"/> when unknown.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.ICatalogRepository.ResolveCanonicalAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Resolves a catalog identity to the entry that currently represents it,
+            following merge redirects.
+            </summary>
+            <param name="catalogId">Any catalog identity, current or superseded.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The canonical entry, or <see langword="null"/> when unknown.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.ICatalogRepository.CreateAsync(GameLauncher.Relay.Data.Repositories.RelayCatalogEntry,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Creates an entry and binds a fingerprint to it.
+            </summary>
+            <param name="entry">The entry to create.</param>
+            <param name="fingerprint">The fingerprint that produced it.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>
+            The entry now bound to the fingerprint. When a concurrent request created
+            it first, that existing entry is returned instead.
+            </returns>
+            <remarks>
+            Catalog creation is open, so two clients adding the same new game at the
+            same moment is expected rather than exceptional. The alias insert is
+            conditional and the winner is re-read, so one entry results either way.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.ICatalogRepository.RecordOwnershipAsync(System.String,System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <summary>Records that a user has a title in their library.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="catalogId">The title.</param>
+            <param name="addedAt">When it was added.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.CatalogRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.ICatalogRepository"/>.</summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Data.Repositories.CatalogRepository.MaximumRedirectHops">
+            <summary>Bound so a redirect cycle fails loudly instead of hanging.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.CatalogRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory,Microsoft.Extensions.Logging.ILogger{GameLauncher.Relay.Data.Repositories.CatalogRepository})">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+            <param name="logger">Logger for catalog diagnostics.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.CatalogRepository.ResolveByFingerprintAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.CatalogRepository.ResolveCanonicalAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.CatalogRepository.CreateAsync(GameLauncher.Relay.Data.Repositories.RelayCatalogEntry,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.CatalogRepository.RecordOwnershipAsync(System.String,System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayUser">
+            <summary>A registered person.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUser.FriendCode">
+            <summary>Public identity, unique across the relay.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUser.DisplayName">
+            <summary>Name shown to friends.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUser.CreatedAt">
+            <summary>When the user registered.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUser.UpdatedAt">
+            <summary>When the user record last changed.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayDevice">
+            <summary>One machine belonging to a user.</summary>
+            <remarks>
+            The credential lives here rather than on the user, so a second machine can be
+            added and an individual one revoked without disturbing the other.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.DeviceId">
+            <summary>Opaque device identifier. Not a secret.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.FriendCode">
+            <summary>The user this device belongs to.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.TokenHash">
+            <summary>SHA-256 of the device's bearer token. The token itself is never stored.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.Label">
+            <summary>Human-readable label, for a future device list.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.CreatedAt">
+            <summary>When the device was registered.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.LastSeenAt">
+            <summary>When the device last presented its token.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayDevice.RevokedAt">
+            <summary>When the device was revoked, or <see langword="null"/> while active.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayFriendship">
+            <summary>A directed friendship record, created by the requester.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayFriendship.UserFriendCode">
+            <summary>The user who sent the request.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayFriendship.FriendFriendCode">
+            <summary>The user who received it.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayFriendship.Status">
+            <summary>Current state of the relationship.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayFriendship.CreatedAt">
+            <summary>When the request was sent.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayFriendship.RespondedAt">
+            <summary>When it was answered, or <see langword="null"/> while pending.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayPresence">
+            <summary>A user's presence, aggregated across their devices.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayPresence.FriendCode">
+            <summary>The user this presence describes.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayPresence.CurrentGameTitle">
+            <summary>Title of the game being played, or <see langword="null"/>.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayPresence.CurrentGameCatalogId">
+            <summary>
+            Shared catalog identity of that game, when the client knows it.
+            </summary>
+            <remarks>
+            Nullable on purpose: a game whose catalog entry has not been resolved yet
+            must still show as being played.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayPresence.IsOnline">
+            <summary>Whether any of the user's devices holds a live connection.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayPresence.LastSeenAt">
+            <summary>When the user was last seen.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry">
+            <summary>A shared game title.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.CatalogId">
+            <summary>Immutable shared identity.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.CanonicalTitle">
+            <summary>The relay's canonical title.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.Company">
+            <summary>Publisher, when a client reported one.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.SupersededByCatalogId">
+            <summary>The entry this was merged into, or <see langword="null"/> when canonical.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.CreatedAt">
+            <summary>When the entry was created.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayCatalogEntry.UpdatedAt">
+            <summary>When the entry last changed.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.RelayUserAchievement">
+            <summary>One user's record of having earned an achievement.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUserAchievement.FriendCode">
+            <summary>The user who earned it.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUserAchievement.CatalogId">
+            <summary>The title it belongs to.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUserAchievement.ApiName">
+            <summary>Stable handle of the achievement within that title.</summary>
+        </member>
+        <member name="P:GameLauncher.Relay.Data.Repositories.RelayUserAchievement.UnlockedAt">
+            <summary>When it was earned.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.IFriendshipRepository">
+            <summary>Persistence for friendships and requests.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.GetForUserAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Gets every friendship involving a user, in either direction.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>All relationships the user is party to.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.FindBetweenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>
+            Finds the relationship between two users, whichever way round it was
+            created.
+            </summary>
+            <param name="first">One party.</param>
+            <param name="second">The other party.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The relationship, or <see langword="null"/>.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.GetAcceptedFriendCodesAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Gets the friend codes of a user's accepted friends.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>Accepted friends, in either direction.</returns>
+            <remarks>The presence fan-out list: only accepted friends ever see presence.</remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayFriendship,System.Threading.CancellationToken)">
+            <summary>Creates a pending request.</summary>
+            <param name="friendship">The request to store.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.AcceptAsync(System.String,System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <summary>Accepts a pending request.</summary>
+            <param name="requester">The user who sent it.</param>
+            <param name="addressee">The user who received it.</param>
+            <param name="respondedAt">When it was accepted.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns><see langword="true"/> if a pending row was accepted.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IFriendshipRepository.RemoveAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Removes a relationship, whichever way round it was created.</summary>
+            <param name="first">One party.</param>
+            <param name="second">The other party.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns><see langword="true"/> if a row was removed.</returns>
+            <remarks>
+            Used both for rejecting a request and for removing a friend. A rejection
+            deletes rather than recording a refusal, so the requester can try again
+            later and so the relay does not keep a list of who declined whom.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.FriendshipRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.IFriendshipRepository"/>.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory)">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.GetForUserAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.FindBetweenAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.GetAcceptedFriendCodesAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayFriendship,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.AcceptAsync(System.String,System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.FriendshipRepository.RemoveAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.IPresenceRepository">
+            <summary>Persistence for presence.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IPresenceRepository.GetAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Gets one user's presence.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The presence, or <see langword="null"/> when never recorded.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IPresenceRepository.GetManyAsync(System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <summary>Gets presence for several users.</summary>
+            <param name="friendCodes">The users.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>Presence keyed by friend code, omitting users with none recorded.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IPresenceRepository.UpsertAsync(GameLauncher.Relay.Data.Repositories.RelayPresence,System.Threading.CancellationToken)">
+            <summary>Inserts or replaces a user's presence.</summary>
+            <param name="presence">The presence to store.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IPresenceRepository.SetOfflineAsync(System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <summary>Marks a user offline and stamps when they were last seen.</summary>
+            <param name="friendCode">The user.</param>
+            <param name="lastSeenAt">When they disconnected.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+            <remarks>
+            Clears the current game as well as the online flag. A user who is offline
+            is not playing anything, and leaving a stale title behind would show
+            friends a game that ended hours ago.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.PresenceRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.IPresenceRepository"/>.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.PresenceRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory)">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.PresenceRepository.GetAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.PresenceRepository.GetManyAsync(System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.PresenceRepository.UpsertAsync(GameLauncher.Relay.Data.Repositories.RelayPresence,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.PresenceRepository.SetOfflineAsync(System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.IUserRepository">
+            <summary>Persistence for users.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IUserRepository.GetAsync(System.String,System.Threading.CancellationToken)">
+            <summary>Gets a user by friend code.</summary>
+            <param name="friendCode">The friend code to look up.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The user, or <see langword="null"/>.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IUserRepository.GetManyAsync(System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <summary>Gets several users at once.</summary>
+            <param name="friendCodes">Friend codes to fetch.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The users found, keyed by friend code.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IUserRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayUser,System.Threading.CancellationToken)">
+            <summary>Inserts a user.</summary>
+            <param name="user">The user to insert.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IUserRepository.UpdateDisplayNameAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <summary>Updates a user's display name.</summary>
+            <param name="friendCode">The user to update.</param>
+            <param name="displayName">The new display name.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns><see langword="true"/> if a row was updated.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.IDeviceRepository">
+            <summary>Persistence for devices.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IDeviceRepository.FindByTokenHashAsync(System.String,System.Threading.CancellationToken)">
+            <summary>
+            Finds the active device holding a token hash.
+            </summary>
+            <param name="tokenHash">Hash of the presented token.</param>
+            <param name="cancellationToken">Cancels the query.</param>
+            <returns>The device, or <see langword="null"/> when unknown or revoked.</returns>
+            <remarks>The authentication hot path: one indexed read per request.</remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IDeviceRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayDevice,System.Threading.CancellationToken)">
+            <summary>Inserts a device.</summary>
+            <param name="device">The device to insert.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.IDeviceRepository.TouchAsync(System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <summary>Records that a device was just seen.</summary>
+            <param name="deviceId">The device.</param>
+            <param name="seenAt">When it was seen.</param>
+            <param name="cancellationToken">Cancels the command.</param>
+            <returns>A task that completes when the row has been written.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.UserRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.IUserRepository"/>.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.UserRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory)">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.UserRepository.GetAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.UserRepository.GetManyAsync(System.Collections.Generic.IReadOnlyCollection{System.String},System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.UserRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayUser,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.UserRepository.UpdateDisplayNameAsync(System.String,System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Data.Repositories.DeviceRepository">
+            <summary>Dapper-backed <see cref="T:GameLauncher.Relay.Data.Repositories.IDeviceRepository"/>.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.DeviceRepository.#ctor(GameLauncher.Relay.Data.IRelayConnectionFactory)">
+            <summary>Initialises a new instance.</summary>
+            <param name="connectionFactory">Supplies database connections.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.DeviceRepository.FindByTokenHashAsync(System.String,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.DeviceRepository.AddAsync(GameLauncher.Relay.Data.Repositories.RelayDevice,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Data.Repositories.DeviceRepository.TouchAsync(System.String,System.DateTimeOffset,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Endpoints.RelayEndpoints">
+            <summary>
+            The relay's HTTP surface.
+            </summary>
+            <remarks>
+            Minimal APIs rather than controllers: the surface is small, every endpoint is
+            a single operation, and grouping them by concern in one file keeps the whole
+            contract readable at once.
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Relay.Endpoints.RelayEndpoints.CatalogIdPrefix">
+            <summary>Prefix on every server-assigned catalog identity.</summary>
+            <remarks>
+            Distinguishes an assigned id from a client's provisional <c>local:</c> one
+            at a glance, in a log or a database browser.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapRelayEndpoints(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>
+            Maps every relay endpoint.
+            </summary>
+            <param name="app">The application to map onto.</param>
+            <returns>The same application, for chaining.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapHealth(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>Maps the liveness probe.</summary>
+            <param name="app">The application to map onto.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapRelayInfo(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>
+            Maps the relay's self-description.
+            </summary>
+            <param name="app">The application to map onto.</param>
+            <remarks>
+            Anonymous, because a client must be able to learn which relay it is
+            talking to <em>before</em> deciding which stored credentials to present —
+            or whether it has any for this relay at all.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapRegistration(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>Maps registration.</summary>
+            <param name="app">The application to map onto.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapFriends(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>Maps the friend list.</summary>
+            <param name="app">The application to map onto.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapCatalog(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>Maps catalog resolution.</summary>
+            <param name="app">The application to map onto.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Endpoints.RelayEndpoints.MapSync(Microsoft.AspNetCore.Builder.WebApplication)">
+            <summary>Maps achievement synchronisation.</summary>
+            <param name="app">The application to map onto.</param>
+        </member>
+        <member name="T:GameLauncher.Relay.Hubs.PresenceHub">
+            <summary>
+            Real-time presence and friend requests.
+            </summary>
+            <remarks>
+            <para>
+            Strongly typed over <see cref="T:GameLauncher.Shared.Hubs.IPresenceClient"/>, the same interface the
+            desktop client subscribes against, so a renamed server-to-client call is a
+            build error rather than a silent no-op at runtime.
+            </para>
+            <para>
+            Every broadcast goes only to <em>accepted</em> friends. A pending request
+            leaks nothing beyond the requester's display name.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.#ctor(GameLauncher.Relay.Data.Repositories.IUserRepository,GameLauncher.Relay.Data.Repositories.IFriendshipRepository,GameLauncher.Relay.Data.Repositories.IPresenceRepository,GameLauncher.Relay.Data.Repositories.IDeviceRepository,GameLauncher.Relay.Hubs.PresenceTracker,Microsoft.Extensions.Logging.ILogger{GameLauncher.Relay.Hubs.PresenceHub})">
+            <summary>
+            Initialises a new instance.
+            </summary>
+            <param name="users">User lookup.</param>
+            <param name="friendships">Friendship state.</param>
+            <param name="presence">Presence persistence.</param>
+            <param name="devices">Device last-seen stamping.</param>
+            <param name="tracker">Counts live connections per user.</param>
+            <param name="logger">Logger for hub diagnostics.</param>
+        </member>
+        <member name="P:GameLauncher.Relay.Hubs.PresenceHub.FriendCode">
+            <summary>Gets the authenticated caller's friend code.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.OnConnectedAsync">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.OnDisconnectedAsync(System.Exception)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.UpdatePresence(System.String,System.String)">
+            <summary>
+            Reports what the caller is playing, or clears it.
+            </summary>
+            <param name="gameTitle">Title being played, or <see langword="null"/> when none.</param>
+            <param name="catalogId">Shared catalog identity of that title, when known.</param>
+            <returns>A task that completes once friends have been notified.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.Heartbeat">
+            <summary>
+            Refreshes the caller's last-seen time.
+            </summary>
+            <returns>A task that completes when the stamp has been written.</returns>
+            <remarks>
+            Not a liveness mechanism: SignalR detects a dropped connection on its own.
+            This only keeps last-seen meaningful for a client that stays connected for
+            days without playing anything.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.SendFriendRequest(System.String)">
+            <summary>
+            Sends a friend request.
+            </summary>
+            <param name="targetFriendCode">The friend code to add.</param>
+            <returns>A task that completes once the request has been recorded.</returns>
+            <exception cref="T:Microsoft.AspNetCore.SignalR.HubException">
+            The code is malformed, unknown, the caller's own, or a relationship
+            already exists.
+            </exception>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.RespondFriendRequest(System.String,System.Boolean)">
+            <summary>
+            Accepts or rejects a pending request addressed to the caller.
+            </summary>
+            <param name="requesterFriendCode">Who sent the request.</param>
+            <param name="accept">Whether to accept it.</param>
+            <returns>A task that completes once the outcome has been recorded and sent.</returns>
+            <exception cref="T:Microsoft.AspNetCore.SignalR.HubException">There is no pending request from that user.</exception>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.PublishPresenceAsync(System.String,System.String,System.String,System.Boolean)">
+            <summary>Stores presence and broadcasts it to accepted friends.</summary>
+            <param name="friendCode">Whose presence changed.</param>
+            <param name="gameTitle">Title being played, if any.</param>
+            <param name="catalogId">Catalog identity of that title, if known.</param>
+            <param name="isOnline">Whether the user is online.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.NotifyFriendsAsync(System.String)">
+            <summary>Sends a user's stored presence to all of their accepted friends.</summary>
+            <param name="friendCode">Whose presence to send.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.SendCurrentPresenceAsync(System.String,System.String)">
+            <summary>Sends one user's presence to one recipient.</summary>
+            <param name="subject">Whose presence to send.</param>
+            <param name="recipient">Who receives it.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceHub.BuildPresenceAsync(System.String)">
+            <summary>Builds the wire presence for a user.</summary>
+            <param name="friendCode">The user.</param>
+            <returns>The presence, or <see langword="null"/> when the user is unknown.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Hubs.FriendCodeUserIdProvider">
+            <summary>
+            Maps a SignalR connection to the friend code that owns it.
+            </summary>
+            <remarks>
+            Makes <c>Clients.User(friendCode)</c> address the <em>person</em> rather than
+            one connection, so a message reaches every device they have online. That is
+            the whole of what multi-device delivery requires — without it, presence would
+            have to be fanned out per connection and every future feature would have to
+            remember to do so.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.FriendCodeUserIdProvider.GetUserId(Microsoft.AspNetCore.SignalR.HubConnectionContext)">
+            <inheritdoc />
+        </member>
+        <member name="T:GameLauncher.Relay.Hubs.PresenceTracker">
+            <summary>
+            Tracks how many live connections each user currently has.
+            </summary>
+            <remarks>
+            <para>
+            A user is online while <em>any</em> of their devices is connected, so
+            presence cannot be derived from a single connection's lifetime. This holds
+            the count.
+            </para>
+            <para>
+            Deliberately in-process. That is correct for a single self-hosted instance,
+            which is the deployment target, and wrong the moment the relay runs on more
+            than one node — at which point this needs to move behind a shared store and
+            SignalR needs a backplane. The interface is small precisely so that swap is
+            contained.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceTracker.Add(System.String)">
+            <summary>
+            Records a new connection for a user.
+            </summary>
+            <param name="friendCode">The connecting user.</param>
+            <returns>
+            <see langword="true"/> when this was the user's first connection, meaning
+            they have just come online.
+            </returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceTracker.Remove(System.String)">
+            <summary>
+            Records that a connection has closed.
+            </summary>
+            <param name="friendCode">The disconnecting user.</param>
+            <returns>
+            <see langword="true"/> when the user has no connections left, meaning they
+            have just gone offline.
+            </returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Hubs.PresenceTracker.IsOnline(System.String)">
+            <summary>Determines whether a user has any live connection.</summary>
+            <param name="friendCode">The user to test.</param>
+            <returns><see langword="true"/> when at least one device is connected.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Security.RelayClaims">
+            <summary>
+            Claim types the relay issues.
+            </summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Security.RelayClaims.FriendCode">
+            <summary>The authenticated user's friend code.</summary>
+        </member>
+        <member name="F:GameLauncher.Relay.Security.RelayClaims.DeviceId">
+            <summary>The device the presented token belongs to.</summary>
+        </member>
+        <member name="T:GameLauncher.Relay.Security.RelayPrincipalExtensions">
+            <summary>
+            Convenience accessors for the relay's claims.
+            </summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.RelayPrincipalExtensions.GetFriendCode(System.Security.Claims.ClaimsPrincipal)">
+            <summary>
+            Gets the authenticated friend code.
+            </summary>
+            <param name="principal">The authenticated principal.</param>
+            <returns>The friend code.</returns>
+            <exception cref="T:System.InvalidOperationException">
+            The principal carries no friend code, which means an endpoint that
+            requires authentication was reached without it.
+            </exception>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.RelayPrincipalExtensions.GetDeviceId(System.Security.Claims.ClaimsPrincipal)">
+            <summary>Gets the authenticated device identifier, if present.</summary>
+            <param name="principal">The authenticated principal.</param>
+            <returns>The device identifier, or <see langword="null"/>.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Security.RelayAuthenticationHandler">
+            <summary>
+            Authenticates bearer tokens issued at registration.
+            </summary>
+            <remarks>
+            A database-backed scheme rather than a JWT. A JWT would validate without a
+            read, at the cost of not being revocable before it expires — and on a small
+            self-hosted service, "get that machine off my account" should take effect at
+            once. The cost is one indexed lookup against a table holding as many rows as
+            the user has devices.
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Relay.Security.RelayAuthenticationHandler.SchemeName">
+            <summary>Name of the authentication scheme.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.RelayAuthenticationHandler.#ctor(Microsoft.Extensions.Options.IOptionsMonitor{Microsoft.AspNetCore.Authentication.AuthenticationSchemeOptions},Microsoft.Extensions.Logging.ILoggerFactory,System.Text.Encodings.Web.UrlEncoder,GameLauncher.Relay.Security.ITokenService,GameLauncher.Relay.Data.Repositories.IDeviceRepository)">
+            <summary>
+            Initialises a new instance.
+            </summary>
+            <param name="options">Scheme options.</param>
+            <param name="logger">Logger factory supplied by the framework.</param>
+            <param name="encoder">URL encoder supplied by the framework.</param>
+            <param name="tokens">Hashes the presented token.</param>
+            <param name="devices">Looks the device up by token hash.</param>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.RelayAuthenticationHandler.HandleAuthenticateAsync">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Security.RelayAuthenticationHandler.ExtractToken">
+            <summary>
+            Reads the token from the request.
+            </summary>
+            <returns>The token, or <see langword="null"/> when none was supplied.</returns>
+            <remarks>
+            The <c>Authorization</c> header is preferred. The query string is accepted
+            only for the hub path, because a WebSocket handshake cannot carry custom
+            headers — restricting it to that path keeps tokens out of access logs for
+            ordinary requests, where they would otherwise be recorded in the clear.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Relay.Security.ITokenService">
+            <summary>
+            Mints and hashes the credentials the relay issues.
+            </summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.ITokenService.NewToken">
+            <summary>
+            Generates a new device token.
+            </summary>
+            <returns>A token that is shown to the client exactly once.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.ITokenService.Hash(System.String)">
+            <summary>
+            Hashes a token for storage and lookup.
+            </summary>
+            <param name="token">The token to hash.</param>
+            <returns>Lowercase hexadecimal SHA-256 of the token.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.ITokenService.NewFriendCode">
+            <summary>
+            Generates a friend code in the canonical <c>GL-XXXXX-XXXXX</c> form.
+            </summary>
+            <returns>A new friend code.</returns>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.ITokenService.NewDeviceId">
+            <summary>
+            Generates an opaque device identifier.
+            </summary>
+            <returns>32 lowercase hexadecimal characters.</returns>
+        </member>
+        <member name="T:GameLauncher.Relay.Security.TokenService">
+            <summary>
+            Default <see cref="T:GameLauncher.Relay.Security.ITokenService"/>.
+            </summary>
+            <remarks>
+            <para>
+            Tokens are 32 cryptographically random bytes, base64url-encoded, prefixed
+            <c>glr_</c>. The prefix makes a leaked token recognisable in a log or a paste.
+            </para>
+            <para>
+            They are stored as an unsalted SHA-256 hash. Salting plus a slow key
+            derivation exists to make guessing expensive, and guessing is only a threat
+            against low-entropy secrets such as human-chosen passwords. A 256-bit random
+            token cannot be brute-forced however fast the hash is, so a slow KDF would
+            cost a CPU-bound operation on every single request and buy nothing.
+            </para>
+            <para>
+            Omitting the salt is also what makes the hash a usable lookup key: the relay
+            hashes the presented token and finds the device in one indexed read. With a
+            per-row salt it would have to hash against every device row in turn.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Relay.Security.TokenService.TokenPrefix">
+            <summary>Prefix identifying a GameLauncher relay token.</summary>
+        </member>
+        <member name="M:GameLauncher.Relay.Security.TokenService.NewToken">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Security.TokenService.Hash(System.String)">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Security.TokenService.NewFriendCode">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Security.TokenService.NewDeviceId">
+            <inheritdoc />
+        </member>
+        <member name="M:GameLauncher.Relay.Security.TokenService.Base64UrlEncode(System.Byte[])">
+            <summary>Encodes bytes as unpadded base64url.</summary>
+            <param name="bytes">Bytes to encode.</param>
+            <returns>A URL-safe string with no padding.</returns>
+        </member>
+        <member name="T:Program">
+            <summary>
+            Entry point marker, exposed so integration tests can host the relay through
+            <c>WebApplicationFactory</c>.
+            </summary>
+            <remarks>
+            A top-level-statements program compiles to an internal <c>Program</c> class.
+            This partial declaration makes it public without introducing a second entry
+            point, which is the supported way to test a minimal-API application in place
+            rather than reconstructing its composition in the test.
+            </remarks>
+        </member>
+    </members>
+</doc>

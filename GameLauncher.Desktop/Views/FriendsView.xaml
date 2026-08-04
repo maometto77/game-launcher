@@ -1,0 +1,209 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.FriendsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:FriendsViewModel}"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="FriendRowTemplate">
+            <Border Padding="12,10" Background="Transparent">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Presence dot: in-game, online, or offline -->
+                    <Ellipse Grid.Column="0"
+                             Width="9"
+                             Height="9"
+                             VerticalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource OfflineBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource OnlineBrush}" />
+                                    </DataTrigger>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsOnline}" Value="True" />
+                                            <Condition Binding="{Binding CurrentGameTitle, Converter={StaticResource HasValueToVisibility}}" Value="Visible" />
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Fill" Value="{StaticResource InGameBrush}" />
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+
+                    <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   Text="{Binding DisplayName}"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <!-- Playing a game -->
+                        <TextBlock Foreground="{StaticResource InGameBrush}"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Visibility="{Binding CurrentGameTitle, Converter={StaticResource HasValueToVisibility}}">
+                            <Run Text="Playing" />
+                            <Run Text="{Binding CurrentGameTitle, Mode=OneWay}" />
+                        </TextBlock>
+
+                        <!-- Not playing: last seen, which stays honest when offline -->
+                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding LastSeenAt, Converter={StaticResource RelativeTime}}"
+                                   Visibility="{Binding CurrentGameTitle, Converter={StaticResource HasValueToVisibility}, ConverterParameter=Invert}" />
+
+                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding FriendCode}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- Only an incoming request is actionable -->
+                        <StackPanel Orientation="Horizontal"
+                                    Visibility="{Binding IsIncomingRequest, Converter={StaticResource BooleanToVisibility}}">
+                            <Button Command="{Binding DataContext.AcceptCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"
+                                    Content="Accept"
+                                    Style="{StaticResource PrimaryButtonStyle}" />
+                            <Button Margin="8,0,0,0"
+                                    Command="{Binding DataContext.RejectCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                    CommandParameter="{Binding}"
+                                    Content="Decline"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
+
+                        <TextBlock VerticalAlignment="Center" Text="Awaiting reply">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding Status}" Value="Pending" />
+                                                <Condition Binding="{Binding IsIncomingRequest}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <StackPanel>
+                <TextBlock Style="{StaticResource DisplayTextStyle}" Text="Friends" />
+                <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedTextStyle}">
+                    <Run Text="Your friend code is" />
+                    <Run FontFamily="{StaticResource MonoFontFamily}"
+                         Foreground="{StaticResource AccentBrush}"
+                         Text="{Binding MyFriendCode, Mode=OneWay}" />
+                </TextBlock>
+            </StackPanel>
+
+            <Button HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Command="{Binding RefreshCommand}"
+                    Content="Refresh"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+        </Grid>
+
+        <!-- Connection banner: only shown when something is not live -->
+        <Border Grid.Row="1"
+                Margin="0,16,0,0"
+                Padding="12,9"
+                Background="{StaticResource WarningBannerBrush}"
+                BorderBrush="{StaticResource WarningBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Visibility="{Binding IsUsingCachedData, Converter={StaticResource BooleanToVisibility}}">
+            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                       Text="{Binding ConnectionText}"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <!-- Add a friend -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <TextBox FontFamily="{StaticResource MonoFontFamily}"
+                         Text="{Binding FriendCodeInput, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBlock Margin="10,0,0,0"
+                           VerticalAlignment="Center"
+                           Foreground="{StaticResource TextDisabledBrush}"
+                           IsHitTestVisible="False"
+                           Text="GL-XXXXX-XXXXX"
+                           Visibility="{Binding FriendCodeInput, Converter={StaticResource HasValueToVisibility}, ConverterParameter=Invert}" />
+            </Grid>
+
+            <Button Grid.Column="1"
+                    Margin="8,0,0,0"
+                    Command="{Binding SendRequestCommand}"
+                    Content="Send request"
+                    Style="{StaticResource PrimaryButtonStyle}" />
+
+            <TextBlock Grid.Column="2"
+                       Margin="14,0,0,0"
+                       VerticalAlignment="Center"
+                       Style="{StaticResource MutedTextStyle}"
+                       Text="{Binding StatusText}"
+                       Visibility="{Binding StatusText, Converter={StaticResource HasValueToVisibility}}" />
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Border Background="{StaticResource BackgroundDeepBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3">
+                <ItemsControl ItemTemplate="{StaticResource FriendRowTemplate}" ItemsSource="{Binding Entries}" />
+            </Border>
+
+            <StackPanel HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}}">
+                <TextBlock HorizontalAlignment="Center"
+                           Style="{StaticResource HeadingTextStyle}"
+                           Text="No friends yet" />
+                <TextBlock Margin="0,6,0,0"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource MutedTextStyle}"
+                           Text="Share your friend code, or add someone with theirs." />
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="3"
+                Margin="0,16,0,0"
+                Padding="12,9"
+                VerticalAlignment="Top"
+                Background="{StaticResource DangerBannerBrush}"
+                BorderBrush="{StaticResource DangerBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibility}}">
+            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,208 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.CollectionsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:CollectionsViewModel}"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="GameRowTemplate">
+            <Grid Margin="10,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Width="24"
+                        Height="24"
+                        Background="{StaticResource SurfaceRaisedBrush}"
+                        CornerRadius="2">
+                    <Grid>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontSize="10"
+                                   Foreground="{StaticResource TextMutedBrush}"
+                                   Text="{Binding Initials}" />
+                        <Image Source="{Binding CoverArtPath, Converter={StaticResource PathToImage}}"
+                               Stretch="UniformToFill" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="{Binding Title}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Style="{StaticResource CaptionTextStyle}"
+                               Text="{Binding CollectionName}"
+                               Visibility="{Binding CollectionName, Converter={StaticResource HasValueToVisibility}}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource DisplayTextStyle}" Text="Collections" />
+            <TextBlock Margin="0,4,0,0"
+                       Style="{StaticResource MutedTextStyle}"
+                       Text="A game belongs to one collection at a time. Use tags for overlapping labels." />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Margin="0,14,0,0"
+                Padding="12,9"
+                Background="{StaticResource DangerBannerBrush}"
+                BorderBrush="{StaticResource DangerBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibility}}">
+            <TextBlock Foreground="{StaticResource TextPrimaryBrush}" Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="280" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Collection list -->
+            <Grid Grid.Column="0" Margin="0,0,16,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Background="{StaticResource BackgroundDeepBrush}"
+                        BorderBrush="{StaticResource BorderSubtleBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3">
+                    <Grid>
+                        <ListBox DisplayMemberPath="Label"
+                                 ItemContainerStyle="{StaticResource RowItemStyle}"
+                                 ItemsSource="{Binding CollectionItems}"
+                                 SelectedItem="{Binding SelectedCollection}" />
+
+                        <TextBlock Margin="12,10"
+                                   VerticalAlignment="Top"
+                                   Style="{StaticResource MutedTextStyle}"
+                                   Text="No collections yet."
+                                   Visibility="{Binding CollectionItems.Count, Converter={StaticResource HasValueToVisibility}, ConverterParameter=Invert}" />
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1" Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding NewCollectionName, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Command="{Binding CreateCommand}"
+                            Content="Create"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                </Grid>
+            </Grid>
+
+            <!-- Membership -->
+            <Grid Grid.Column="1" IsEnabled="{Binding HasSelection}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}" />
+                    <Button Grid.Column="1"
+                            Margin="8,0,0,0"
+                            Command="{Binding RenameCommand}"
+                            Content="Rename"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                    <Button Grid.Column="2"
+                            Margin="8,0,0,0"
+                            Command="{Binding DeleteCommand}"
+                            Content="Delete"
+                            Style="{StaticResource DangerButtonStyle}" />
+                </Grid>
+
+                <Grid Grid.Row="1" Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- In this collection -->
+                    <Grid Grid.Column="0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Style="{StaticResource SectionLabelTextStyle}" Text="IN THIS COLLECTION" />
+                        <Border Grid.Row="1"
+                                Margin="0,8,0,0"
+                                Background="{StaticResource BackgroundDeepBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <ListBox ItemContainerStyle="{StaticResource RowItemStyle}"
+                                     ItemTemplate="{StaticResource GameRowTemplate}"
+                                     ItemsSource="{Binding GamesInCollection}"
+                                     SelectedItem="{Binding SelectedMemberGame}" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Move controls -->
+                    <StackPanel Grid.Column="1"
+                                Margin="12,0"
+                                VerticalAlignment="Center">
+                        <Button Command="{Binding AddGameCommand}"
+                                Content="&#x2190;"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                ToolTip="Move the selected game into this collection" />
+                        <Button Margin="0,8,0,0"
+                                Command="{Binding RemoveGameCommand}"
+                                Content="&#x2192;"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                ToolTip="Remove the selected game from this collection" />
+                    </StackPanel>
+
+                    <!-- Everything else -->
+                    <Grid Grid.Column="2">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Style="{StaticResource SectionLabelTextStyle}" Text="OTHER GAMES" />
+                        <Border Grid.Row="1"
+                                Margin="0,8,0,0"
+                                Background="{StaticResource BackgroundDeepBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <ListBox ItemContainerStyle="{StaticResource RowItemStyle}"
+                                     ItemTemplate="{StaticResource GameRowTemplate}"
+                                     ItemsSource="{Binding AvailableGames}"
+                                     SelectedItem="{Binding SelectedAvailableGame}" />
+                        </Border>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

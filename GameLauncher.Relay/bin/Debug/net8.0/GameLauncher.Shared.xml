@@ -1,0 +1,508 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>GameLauncher.Shared</name>
+    </assembly>
+    <members>
+        <member name="T:GameLauncher.Shared.Contracts.AchievementUnlockDto">
+            <summary>
+            One earned achievement, as exchanged with the relay.
+            </summary>
+            <remarks>
+            Identified by catalog id and api name rather than by any row identifier.
+            Row ids are local to whichever database produced them, and a catalog merge
+            may delete one; the api name is the stable authored handle and survives both.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementUnlockDto.CatalogId">
+            <summary>Shared catalog identity of the title.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementUnlockDto.ApiName">
+            <summary>Stable handle of the achievement within that title.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementUnlockDto.UnlockedAt">
+            <summary>When the achievement was earned.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.AchievementSyncRequest">
+            <summary>
+            Pushes locally earned achievements to the relay.
+            </summary>
+            <remarks>
+            Safe to retry. Merging takes the earliest unlock time, so replaying a batch
+            whose response was lost cannot move an earned-on date or create a duplicate.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementSyncRequest.Unlocks">
+            <summary>The unlocks to push. May be empty, which makes the call a pure fetch.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementSyncRequest.IncludeCatalogIds">
+            <summary>
+            Catalog identities the caller wants the server's view of, beyond those
+            named in <see cref="P:GameLauncher.Shared.Contracts.AchievementSyncRequest.Unlocks"/>.
+            </summary>
+            <remarks>
+            Lets a client that has just reinstalled recover its history without having
+            anything to push.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.AchievementSyncResponse">
+            <summary>
+            The relay's authoritative view after a sync.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementSyncResponse.Accepted">
+            <summary>How many pushed unlocks were new to the relay.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.AchievementSyncResponse.Unlocks">
+            <summary>
+            Every unlock the relay holds for the titles involved.
+            </summary>
+            <remarks>
+            Returned so the client can adopt an earlier unlock time recorded by
+            another device, and recover unlocks it has no local record of.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.CatalogResolveRequest">
+            <summary>
+            Asks the relay which shared catalog entry a game belongs to.
+            </summary>
+            <remarks>
+            Carries only publisher-supplied metadata. Nothing machine-specific is sent —
+            no install path, no file size — because the fingerprint has to be identical
+            for two people who installed the same game to different drives.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveRequest.Fingerprint">
+            <summary>Deterministic fingerprint computed by the client.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveRequest.Title">
+            <summary>The title as the client knows it, used when creating a new entry.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveRequest.Company">
+            <summary>Publisher from the executable's version resource, if any.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.CatalogResolveResponse">
+            <summary>
+            The catalog identity a fingerprint resolves to.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveResponse.CatalogId">
+            <summary>
+            The canonical catalog identity.
+            </summary>
+            <remarks>
+            Always canonical: the relay follows its own merge redirects before
+            answering, so a client never adopts an identity that has already been
+            merged into another.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveResponse.CanonicalTitle">
+            <summary>The relay's title for the entry.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.CatalogResolveResponse.WasCreated">
+            <summary>
+            Whether this request created the entry rather than matching an existing one.
+            </summary>
+            <remarks>
+            Informational. Catalog creation is open, so a miss legitimately creates an
+            entry rather than failing.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.ErrorResponse">
+            <summary>
+            Uniform error body returned by the relay's HTTP endpoints.
+            </summary>
+            <remarks>
+            <see cref="P:GameLauncher.Shared.Contracts.ErrorResponse.Error"/> is a stable machine-readable code intended for client
+            branching; <see cref="P:GameLauncher.Shared.Contracts.ErrorResponse.Detail"/> is free text intended for logs and
+            diagnostics. Client code should never branch on <see cref="P:GameLauncher.Shared.Contracts.ErrorResponse.Detail"/>.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.ErrorResponse.Error">
+            <summary>Stable, machine-readable error code, for example <c>invalid_friend_code</c>.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.ErrorResponse.Detail">
+            <summary>Optional human-readable elaboration.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.FriendCodeContract">
+            <summary>
+            Defines the on-the-wire shape of a friend code.
+            </summary>
+            <remarks>
+            <para>
+            A friend code is the public identity of a user: it is the only identifier
+            exchanged between people, and it is safe to share. It is deliberately not a
+            secret — the paired auth token is.
+            </para>
+            <para>
+            The format is <c>GL-XXXXX-XXXXX</c>, where each <c>X</c> is a Crockford
+            Base32 symbol. That alphabet omits <c>I</c>, <c>L</c>, <c>O</c> and
+            <c>U</c>, which removes the usual transcription ambiguities (1/I/L, 0/O)
+            when somebody reads a code aloud or copies it by hand. Ten symbols carry
+            fifty bits of entropy, which is far more than enough to make guessing a
+            stranger's code impractical.
+            </para>
+            <para>
+            This type holds format constants and validation only. Generation lives with
+            the side that owns identity creation, so that this assembly stays free of
+            behaviour.
+            </para>
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Shared.Contracts.FriendCodeContract.Prefix">
+            <summary>The fixed prefix every friend code carries.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Contracts.FriendCodeContract.Alphabet">
+            <summary>The symbol alphabet used for the random portion of a code (Crockford Base32).</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Contracts.FriendCodeContract.GroupLength">
+            <summary>Number of random symbols in each of the two groups.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Contracts.FriendCodeContract.TotalLength">
+            <summary>Total length of a well-formed friend code, including prefix and separators.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Contracts.FriendCodeContract.Pattern">
+            <summary>Regular expression source matching a well-formed friend code.</summary>
+        </member>
+        <member name="M:GameLauncher.Shared.Contracts.FriendCodeContract.IsValid(System.String)">
+            <summary>
+            Determines whether <paramref name="value"/> is a well-formed friend code.
+            </summary>
+            <param name="value">Candidate friend code; may be <see langword="null"/>.</param>
+            <returns>
+            <see langword="true"/> when the value matches <see cref="F:GameLauncher.Shared.Contracts.FriendCodeContract.Pattern"/> exactly;
+            otherwise <see langword="false"/>.
+            </returns>
+            <remarks>
+            Validation is case-sensitive by design. Codes are always produced in
+            upper case, so callers should normalise user input with
+            <see cref="M:GameLauncher.Shared.Contracts.FriendCodeContract.Normalize(System.String)"/> before validating.
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Shared.Contracts.FriendCodeContract.Normalize(System.String)">
+            <summary>
+            Normalises user-entered text into the canonical friend code form.
+            </summary>
+            <param name="value">Raw user input; may be <see langword="null"/>.</param>
+            <returns>
+            The trimmed, upper-cased value, or an empty string when
+            <paramref name="value"/> is <see langword="null"/> or blank.
+            </returns>
+            <remarks>
+            This only fixes casing and surrounding whitespace. It deliberately does
+            not attempt to repair a malformed code by inserting separators, because
+            silently reshaping input risks turning a typo into a valid code that
+            belongs to somebody else.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.FriendDto">
+            <summary>
+            One entry in a user's friend list, carrying both the relationship state and
+            the relay's last known presence for that person.
+            </summary>
+            <remarks>
+            Pending and accepted friendships are returned by the same endpoint so the
+            client can render outstanding requests without a second round trip. For a
+            <see cref="F:GameLauncher.Shared.Enums.FriendshipStatus.Pending"/> entry the presence fields are always
+            neutral (offline, no game): presence is not shared until both sides agree.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.FriendCode">
+            <summary>The friend's public friend code.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.DisplayName">
+            <summary>The friend's display name.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.Status">
+            <summary>State of the relationship.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.IsIncomingRequest">
+            <summary>
+            For a <see cref="F:GameLauncher.Shared.Enums.FriendshipStatus.Pending"/> entry, whether the other
+            party initiated it and this user owes a response.
+            </summary>
+            <remarks>
+            Distinguishes "they want to be your friend" (actionable — show
+            accept/reject) from "you asked them" (informational — show as awaiting).
+            Always <see langword="false"/> once the friendship is accepted.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.CurrentGameTitle">
+            <summary>
+            Title of the game the friend is playing, or <see langword="null"/> when
+            they are not in a game or the friendship is still pending.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.IsOnline">
+            <summary>Whether the friend currently holds a live relay connection.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendDto.LastSeenAt">
+            <summary>When the friend was last seen by the relay.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.FriendListResponse">
+            <summary>
+            Response body for <c>GET /friends</c>.
+            </summary>
+            <remarks>
+            Wrapped in an object rather than returned as a bare array so the contract
+            can grow additional top-level fields later without breaking existing
+            clients.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendListResponse.Friends">
+            <summary>
+            Accepted friends and outstanding requests in both directions, each with
+            the relay's last known presence.
+            </summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.FriendRequestDto">
+            <summary>
+            Pushed to a connected client when somebody sends them a friend request.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestDto.FromFriendCode">
+            <summary>Friend code of the user who sent the request.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestDto.FromDisplayName">
+            <summary>Display name of the user who sent the request.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestDto.SentAt">
+            <summary>When the request was created.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.FriendRequestResultDto">
+            <summary>
+            Pushed to the original requester when their friend request is answered.
+            </summary>
+            <remarks>
+            A rejection is reported to the requester so their UI can stop showing the
+            request as pending. The relay deletes the underlying row on rejection, so
+            this message is the only notice the requester receives.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestResultDto.FriendCode">
+            <summary>Friend code of the user who answered the request.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestResultDto.DisplayName">
+            <summary>Display name of the user who answered the request.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestResultDto.Accepted">
+            <summary>
+            <see langword="true"/> when the request was accepted;
+            <see langword="false"/> when it was rejected.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.FriendRequestResultDto.RespondedAt">
+            <summary>When the response was recorded.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.PresenceDto">
+            <summary>
+            A single user's presence, broadcast to their accepted friends.
+            </summary>
+            <remarks>
+            Display state is intentionally derived by the client rather than carried on
+            the wire: "Playing {game}" when <see cref="P:GameLauncher.Shared.Contracts.PresenceDto.IsOnline"/> is
+            <see langword="true"/> and <see cref="P:GameLauncher.Shared.Contracts.PresenceDto.CurrentGameTitle"/> is set, plain
+            "Online" when online with no game, and "Offline" otherwise. Sending a
+            redundant pre-computed state alongside the raw fields would invite the two
+            to disagree.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.PresenceDto.FriendCode">
+            <summary>Friend code of the user this presence describes.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.PresenceDto.DisplayName">
+            <summary>Current display name of the user.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.PresenceDto.CurrentGameTitle">
+            <summary>
+            Title of the game currently being played, or <see langword="null"/> when
+            the user is not in a game.
+            </summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.PresenceDto.IsOnline">
+            <summary>Whether the user currently holds a live relay connection.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.PresenceDto.LastSeenAt">
+            <summary>
+            When the user was last seen. Updated on disconnect and on heartbeat, so
+            it stays meaningful for both online and offline users.
+            </summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.RegisterRequest">
+            <summary>
+            Request body for <c>POST /register</c>, issued once on a client's first run.
+            </summary>
+            <remarks>
+            Registration is anonymous: the caller supplies only a display name and the
+            relay mints both the friend code and the auth token. There is no password,
+            because the token is the credential.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RegisterRequest.DisplayName">
+            <summary>
+            Human-readable name shown to friends.
+            </summary>
+            <remarks>
+            Not unique and not an identifier — two users may share a display name.
+            The friend code is the identity.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.RegisterResponse">
+            <summary>
+            Response body for a successful <c>POST /register</c> call.
+            </summary>
+            <remarks>
+            The <see cref="P:GameLauncher.Shared.Contracts.RegisterResponse.AuthToken"/> is returned exactly once, at registration time.
+            The relay stores only a hash of it and cannot reissue or recover it, so the
+            client must persist it locally on receipt.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RegisterResponse.FriendCode">
+            <summary>The newly minted public friend code, in <c>GL-XXXXX-XXXXX</c> form.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RegisterResponse.AuthToken">
+            <summary>
+            Bearer token authenticating this device. Treat as a secret.
+            </summary>
+            <remarks>
+            The token identifies a <em>device</em>, not the user. A second machine
+            gets its own token against the same <see cref="P:GameLauncher.Shared.Contracts.RegisterResponse.FriendCode"/>, so one can
+            be revoked without disturbing the other.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RegisterResponse.DeviceId">
+            <summary>
+            Identifier of the device record this token belongs to.
+            </summary>
+            <remarks>
+            Not a secret. Lets a client name itself in a future device list without
+            revealing its token.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Contracts.RelayInfo">
+            <summary>
+            A relay's self-description, fetched before anything else.
+            </summary>
+            <remarks>
+            <see cref="P:GameLauncher.Shared.Contracts.RelayInfo.RelayId"/> exists because a relay cannot be identified by its
+            address. The same relay moved from a laptop to a VPS keeps its data and its
+            catalog namespace but changes URL; two different relays could be reached
+            through the same URL over time. Comparing addresses gets both cases wrong, so
+            the relay reports an identity of its own instead.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RelayInfo.RelayId">
+            <summary>
+            Stable identity of this relay instance, generated once and stored in its
+            database.
+            </summary>
+            <remarks>
+            Tied to the database rather than the deployment, which is what makes
+            moving the relay to another host a non-event: the data moves with it, so
+            the identity does too.
+            </remarks>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RelayInfo.Name">
+            <summary>Operator-facing name, for display in the launcher.</summary>
+        </member>
+        <member name="P:GameLauncher.Shared.Contracts.RelayInfo.SchemaVersion">
+            <summary>Schema version the relay is running.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Enums.FriendshipStatus">
+            <summary>
+            Lifecycle state of a friendship record held by the relay.
+            </summary>
+            <remarks>
+            A friendship is stored as a single directed row created by the requesting
+            user. Presence is only exchanged once the row reaches
+            <see cref="F:GameLauncher.Shared.Enums.FriendshipStatus.Accepted"/>; a <see cref="F:GameLauncher.Shared.Enums.FriendshipStatus.Pending"/> row leaks nothing beyond the
+            requester's display name.
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Shared.Enums.FriendshipStatus.Pending">
+            <summary>A request has been sent but the recipient has not answered yet.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Enums.FriendshipStatus.Accepted">
+            <summary>Both parties agreed to the friendship and presence is shared.</summary>
+        </member>
+        <member name="T:GameLauncher.Shared.Hubs.IPresenceClient">
+            <summary>
+            Methods the relay invokes on a connected client.
+            </summary>
+            <remarks>
+            <para>
+            The relay implements its hub as a strongly-typed hub over this interface, so
+            the compiler checks every server-to-client call against this contract. The
+            desktop client subscribes by name using <c>nameof</c> against these members,
+            which keeps both ends bound to the same definition and turns a renamed
+            method into a build error rather than a silent runtime no-op.
+            </para>
+            <para>
+            This interface is a contract only — neither side inherits behaviour from it.
+            </para>
+            </remarks>
+        </member>
+        <member name="M:GameLauncher.Shared.Hubs.IPresenceClient.PresenceChanged(GameLauncher.Shared.Contracts.PresenceDto)">
+            <summary>
+            Notifies the client that an accepted friend's presence changed.
+            </summary>
+            <param name="presence">The friend's new presence.</param>
+            <returns>A task that completes when the client has received the message.</returns>
+        </member>
+        <member name="M:GameLauncher.Shared.Hubs.IPresenceClient.FriendRequestReceived(GameLauncher.Shared.Contracts.FriendRequestDto)">
+            <summary>
+            Notifies the client that somebody has sent them a friend request.
+            </summary>
+            <param name="request">Details of the incoming request.</param>
+            <returns>A task that completes when the client has received the message.</returns>
+        </member>
+        <member name="M:GameLauncher.Shared.Hubs.IPresenceClient.FriendRequestResolved(GameLauncher.Shared.Contracts.FriendRequestResultDto)">
+            <summary>
+            Notifies the client that a friend request they sent has been answered.
+            </summary>
+            <param name="result">The outcome, including whether it was accepted.</param>
+            <returns>A task that completes when the client has received the message.</returns>
+        </member>
+        <member name="T:GameLauncher.Shared.Hubs.PresenceHubContract">
+            <summary>
+            Names and connection details of the relay's presence hub.
+            </summary>
+            <remarks>
+            Client-to-server calls go through SignalR's string-based
+            <c>InvokeAsync</c>/<c>SendAsync</c>, which has no compile-time checking. The
+            method names live here as constants so the client and the relay reference
+            one definition instead of repeating string literals that can silently drift
+            apart.
+            </remarks>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.Path">
+            <summary>Path the hub is mapped to on the relay, relative to the server root.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.AccessTokenQueryParameter">
+            <summary>
+            Name of the query string parameter carrying the caller's auth token.
+            </summary>
+            <remarks>
+            The browser WebSocket API cannot set request headers, so SignalR's
+            convention is to pass the credential in the query string. The desktop
+            client is not a browser and sends a proper <c>Authorization</c> header
+            as well; the relay accepts either.
+            </remarks>
+        </member>
+        <member name="T:GameLauncher.Shared.Hubs.PresenceHubContract.Methods">
+            <summary>Server methods a client may invoke.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.Methods.UpdatePresence">
+            <summary>Reports the caller's current game, or clears it. Broadcast to accepted friends.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.Methods.SendFriendRequest">
+            <summary>Sends a friend request to another user by friend code.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.Methods.RespondFriendRequest">
+            <summary>Accepts or rejects a pending inbound friend request.</summary>
+        </member>
+        <member name="F:GameLauncher.Shared.Hubs.PresenceHubContract.Methods.Heartbeat">
+            <summary>Keeps the connection marked live and refreshes the caller's last-seen time.</summary>
+        </member>
+    </members>
+</doc>

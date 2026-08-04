@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!--
+      The Windows 10 platform version is required by the Windows toast
+      notification API. It only raises the build-time API surface; the app still
+      runs on any Windows 10 1809 or later machine, which is what
+      SupportedOSPlatformVersion below declares.
+    -->
+    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>false</UseWindowsForms>
+    <RootNamespace>GameLauncher.Desktop</RootNamespace>
+    <AssemblyName>GameLauncher.Desktop</AssemblyName>
+    <Description>Steam-style game launcher desktop client.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameLauncher.Shared\GameLauncher.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Declared explicitly rather than relied upon from ImplicitUsings. WPF's XAML
+      markup pass compiles through a generated *_wpftmp project that imports
+      System.Windows.Shapes (which also defines a Path type) but not System.IO,
+      so file-system code that compiles in the main pass fails in that one. A
+      project-level Using flows into both passes and keeps them consistent.
+    -->
+    <Using Include="System.IO" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Path-traversal guards and file-name sanitisers are internal because nothing
+      outside this assembly should call them, but they are exactly the logic most
+      worth testing directly rather than through a UI.
+    -->
+    <InternalsVisibleTo Include="GameLauncher.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Dapper" Version="2.1.79" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="8.0.11" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3" />
+    <PackageReference Include="SharpCompress" Version="0.50.3" />
+  </ItemGroup>
+
+</Project>

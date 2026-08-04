@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>GameLauncher.Shared</RootNamespace>
+    <AssemblyName>GameLauncher.Shared</AssemblyName>
+    <Description>Wire contracts shared between the GameLauncher desktop client and the relay service.</Description>
+  </PropertyGroup>
+
+  <!--
+    Intentionally dependency-free. This assembly carries DTO contracts only, so
+    both the WPF client and the ASP.NET Core relay can reference it without
+    dragging in either side's implementation stack.
+  -->
+
+</Project>

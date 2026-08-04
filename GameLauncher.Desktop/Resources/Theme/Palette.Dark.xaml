@@ -1,0 +1,111 @@
+<!--
+    Dark theme — the default.
+
+    Follows Steam's dark client: a cool blue-grey neutral ramp rather than a pure
+    grey one, a cyan accent for interactive text and selection, and a saturated
+    green reserved exclusively for the Play action so that "launch the game" never
+    visually competes with any other button on screen.
+
+    Every key here must also exist in every other palette, because switching theme
+    swaps this whole dictionary. No view may hard-code a colour.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Neutral ramp, darkest to lightest -->
+    <Color x:Key="ChromeColor">#FF0E141B</Color>
+    <Color x:Key="BackgroundDeepColor">#FF16202D</Color>
+    <Color x:Key="BackgroundColor">#FF1B2838</Color>
+    <Color x:Key="SurfaceColor">#FF23303F</Color>
+    <Color x:Key="SurfaceRaisedColor">#FF2A3F5A</Color>
+    <Color x:Key="SurfaceHoverColor">#FF32475F</Color>
+    <Color x:Key="BorderColor">#FF32455C</Color>
+    <Color x:Key="BorderSubtleColor">#FF243244</Color>
+
+    <!-- Accent -->
+    <Color x:Key="AccentColor">#FF66C0F4</Color>
+    <Color x:Key="AccentDimColor">#FF417A9B</Color>
+    <Color x:Key="AccentDeepColor">#FF1A3F5C</Color>
+
+    <!-- Play action -->
+    <Color x:Key="PlayColor">#FF5BA32B</Color>
+    <Color x:Key="PlayHighlightColor">#FF7CBF3F</Color>
+    <Color x:Key="PlayHoverHighlightColor">#FF8FD44B</Color>
+    <Color x:Key="PlayPressedColor">#FF497F22</Color>
+
+    <!-- Status -->
+    <Color x:Key="DangerColor">#FFC94A3B</Color>
+    <Color x:Key="DangerHoverColor">#FFDD5B4B</Color>
+    <Color x:Key="WarningColor">#FFD9A22B</Color>
+    <Color x:Key="OnlineColor">#FF57CBDE</Color>
+    <Color x:Key="InGameColor">#FF90BA3C</Color>
+    <Color x:Key="OfflineColor">#FF6A7480</Color>
+
+    <!-- Text -->
+    <Color x:Key="TextPrimaryColor">#FFE6EDF3</Color>
+    <Color x:Key="TextSecondaryColor">#FFC7D5E0</Color>
+    <Color x:Key="TextMutedColor">#FF8F98A0</Color>
+    <Color x:Key="TextDisabledColor">#FF5C6772</Color>
+    <Color x:Key="TextOnAccentColor">#FF0E141B</Color>
+
+    <!-- Scrim base, used by the hero gradient -->
+    <Color x:Key="ScrimColor">#FF161F2B</Color>
+
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="ChromeBrush" Color="{StaticResource ChromeColor}" />
+    <SolidColorBrush x:Key="BackgroundDeepBrush" Color="{StaticResource BackgroundDeepColor}" />
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="{StaticResource SurfaceColor}" />
+    <SolidColorBrush x:Key="SurfaceRaisedBrush" Color="{StaticResource SurfaceRaisedColor}" />
+    <SolidColorBrush x:Key="SurfaceHoverBrush" Color="{StaticResource SurfaceHoverColor}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="BorderSubtleBrush" Color="{StaticResource BorderSubtleColor}" />
+
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentDimBrush" Color="{StaticResource AccentDimColor}" />
+    <SolidColorBrush x:Key="AccentDeepBrush" Color="{StaticResource AccentDeepColor}" />
+
+    <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHoverColor}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+    <SolidColorBrush x:Key="OnlineBrush" Color="{StaticResource OnlineColor}" />
+    <SolidColorBrush x:Key="InGameBrush" Color="{StaticResource InGameColor}" />
+    <SolidColorBrush x:Key="OfflineBrush" Color="{StaticResource OfflineColor}" />
+
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+    <SolidColorBrush x:Key="TextDisabledBrush" Color="{StaticResource TextDisabledColor}" />
+    <SolidColorBrush x:Key="TextOnAccentBrush" Color="{StaticResource TextOnAccentColor}" />
+
+    <!--
+        Translucent fills. Declared here rather than inline in the views so that
+        switching theme actually switches everything; a hard-coded #33C94A3B in a
+        view would survive a palette swap and look wrong.
+    -->
+    <SolidColorBrush x:Key="TilePlateBrush" Color="#D90E141B" />
+    <SolidColorBrush x:Key="MissingBadgeBrush" Color="#D9C94A3B" />
+    <SolidColorBrush x:Key="DangerBannerBrush" Color="#33C94A3B" />
+    <SolidColorBrush x:Key="WarningBannerBrush" Color="#33D9A22B" />
+
+    <!-- The Play button's signature gradient -->
+    <LinearGradientBrush x:Key="PlayBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="{StaticResource PlayHighlightColor}" />
+        <GradientStop Offset="1" Color="{StaticResource PlayColor}" />
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="PlayHoverBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="{StaticResource PlayHoverHighlightColor}" />
+        <GradientStop Offset="1" Color="{StaticResource PlayHighlightColor}" />
+    </LinearGradientBrush>
+
+    <SolidColorBrush x:Key="PlayPressedBrush" Color="{StaticResource PlayPressedColor}" />
+
+    <!-- Scrim used to keep hero-banner text legible over arbitrary artwork -->
+    <LinearGradientBrush x:Key="HeroScrimBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#00161F2B" />
+        <GradientStop Offset="0.55" Color="#99161F2B" />
+        <GradientStop Offset="1" Color="{StaticResource BackgroundColor}" />
+    </LinearGradientBrush>
+
+</ResourceDictionary>

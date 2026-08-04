@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    Solution-wide build settings. Individual projects override only what is
+    specific to them (target framework flavour, output type, packaging).
+  -->
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+
+    <!--
+      XML documentation is required on public APIs, so the documentation file is
+      generated and CS1591 (missing XML comment) is left as a visible warning. It
+      acts as a compiler-enforced check that public surface stays documented.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <Company>GameLauncher</Company>
+    <Product>GameLauncher</Product>
+    <Version>1.0.0</Version>
+    <NeutralLanguage>en</NeutralLanguage>
+  </PropertyGroup>
+
+</Project>

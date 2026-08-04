@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(dotnet --version)",
+      "PowerShell($paths = @\\(\"$env:ProgramFiles\\\\dotnet\\\\dotnet.exe\", \"${env:ProgramFiles\\(x86\\)}\\\\dotnet\\\\dotnet.exe\", \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\\\\dotnet.exe\"\\); foreach \\($p in $paths\\) { if \\(Test-Path $p\\) { \"FOUND: $p\" } else { \"missing: $p\" } })",
+      "PowerShell($dn = \"$env:ProgramFiles\\\\dotnet\\\\dotnet.exe\"; \"=== SDKs ===\"; & $dn --list-sdks; \"=== Runtimes ===\"; & $dn --list-runtimes; \"=== default version ===\"; & $dn --version)",
+      "PowerShell(\"=== .NET 8 ref packs \\(targeting packs\\) ===\"; Get-ChildItem \"$env:ProgramFiles\\\\dotnet\\\\packs\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name; \"=== Microsoft.NETCore.App.Ref versions ===\"; Get-ChildItem \"$env:ProgramFiles\\\\dotnet\\\\packs\\\\Microsoft.NETCore.App.Ref\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name; \"=== WindowsDesktop.App.Ref versions \\(needed for WPF\\) ===\"; Get-ChildItem \"$env:ProgramFiles\\\\dotnet\\\\packs\\\\Microsoft.WindowsDesktop.App.Ref\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)",
+      "PowerShell(\"=== AspNetCore.App.Ref versions ===\"; Get-ChildItem \"$env:ProgramFiles\\\\dotnet\\\\packs\\\\Microsoft.AspNetCore.App.Ref\" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name)",
+      "PowerShell($sp = \"C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Lenovo-Desktop-Game-Launcher\\\\7e7e5eb2-8aea-4a54-93fc-82eaf2708097\\\\scratchpad\\\\smoke\"; if \\(Test-Path $sp\\) { Remove-Item -Recurse -Force $sp }; New-Item -ItemType Directory -Force $sp | Out-Null; Set-Location $sp; $dn = \"$env:ProgramFiles\\\\dotnet\\\\dotnet.exe\"; & $dn new wpf -n WpfSmoke -f net8.0 -o wpfsmoke 2>&1 | Select-Object -Last 3; & $dn build \".\\\\wpfsmoke\\\\WpfSmoke.csproj\" -v q --nologo 2>&1 | Select-Object -Last 8)",
+      "PowerShell($sp = \"C:\\\\Users\\\\Lenovo\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Lenovo-Desktop-Game-Launcher\\\\7e7e5eb2-8aea-4a54-93fc-82eaf2708097\\\\scratchpad\\\\smoke\"; Set-Location $sp; $dn = \"$env:ProgramFiles\\\\dotnet\\\\dotnet.exe\"; & $dn new web -n WebSmoke -f net8.0 -o websmoke 2>&1 | Select-Object -Last 2; & $dn build \".\\\\websmoke\\\\WebSmoke.csproj\" -v q --nologo 2>&1 | Select-Object -Last 6; Set-Location \"C:\\\\Users\\\\Lenovo\\\\Desktop\\\\Game Launcher\"; Remove-Item -Recurse -Force $sp -ErrorAction SilentlyContinue)",
+      "PowerShell($dn = \"$env:ProgramFiles\\\\dotnet\\\\dotnet.exe\"; \"=== SDKs ===\"; & $dn --list-sdks)",
+      "PowerShell(\"removed Class1.cs \\(if present\\)\")",
+      "PowerShell(\"removed UnitTest1.cs\")",
+      "PowerShell(\"removed probe\")",
+      "PowerShell(\"removed one-off check\")",
+      "PowerShell(\"removed old Palette.xaml\")"
+    ]
+  }
+}

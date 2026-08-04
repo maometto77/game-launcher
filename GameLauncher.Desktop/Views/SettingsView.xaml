@@ -1,0 +1,160 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:SettingsViewModel}"
+             mc:Ignorable="d">
+
+    <ScrollViewer>
+        <Grid Margin="28,24,28,32" MaxWidth="820" HorizontalAlignment="Left">
+            <StackPanel>
+
+                <TextBlock Style="{StaticResource DisplayTextStyle}" Text="Settings" />
+                <TextBlock Margin="0,4,0,0"
+                           Style="{StaticResource MutedTextStyle}"
+                           Text="Stored on this machine only." />
+
+                <!-- Library folders -->
+                <Border Margin="0,22,0,0" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="LIBRARY FOLDERS" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Folders searched when you scan for games. Scanning always asks before adding anything."
+                                   TextWrapping="Wrap" />
+
+                        <Border Margin="0,10,0,0"
+                                Height="130"
+                                Background="{StaticResource BackgroundDeepBrush}"
+                                BorderBrush="{StaticResource BorderSubtleBrush}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <Grid>
+                                <ListBox ItemContainerStyle="{StaticResource RowItemStyle}"
+                                         ItemsSource="{Binding LibraryFolders}"
+                                         SelectedItem="{Binding SelectedFolder}">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Margin="10,6" Text="{Binding}" TextTrimming="CharacterEllipsis" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+
+                                <TextBlock Margin="12,10"
+                                           VerticalAlignment="Top"
+                                           Style="{StaticResource MutedTextStyle}"
+                                           Text="No folders added yet."
+                                           Visibility="{Binding LibraryFolders.Count, Converter={StaticResource HasValueToVisibility}, ConverterParameter=Invert}" />
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Margin="0,10,0,0" Orientation="Horizontal">
+                            <Button Command="{Binding AddFolderCommand}"
+                                    Content="Add folder…"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                            <Button Margin="8,0,0,0"
+                                    Command="{Binding RemoveFolderCommand}"
+                                    Content="Remove"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </StackPanel>
+
+                        <CheckBox Margin="0,14,0,0"
+                                  Content="Scan these folders when GameLauncher starts"
+                                  IsChecked="{Binding AutoScanOnStartup}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Appearance -->
+                <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="APPEARANCE" />
+                        <ComboBox Margin="0,8,0,0"
+                                  Width="240"
+                                  HorizontalAlignment="Left"
+                                  ItemsSource="{Binding Themes}"
+                                  SelectedItem="{Binding SelectedTheme}" />
+                        <TextBlock Margin="0,8,0,0"
+                                   Foreground="{StaticResource WarningBrush}"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="The new theme applies when GameLauncher restarts."
+                                   Visibility="{Binding ThemeChangePending, Converter={StaticResource BooleanToVisibility}}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Friends and relay -->
+                <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="FRIENDS" />
+
+                        <TextBlock Margin="0,10,0,0" Style="{StaticResource CaptionTextStyle}" Text="Your friend code" />
+                        <Grid Margin="0,6,0,0" HorizontalAlignment="Left">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="240" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <!-- Read-only: this is the installation's identity, not a preference. -->
+                            <TextBox Grid.Column="0"
+                                     FontFamily="{StaticResource MonoFontFamily}"
+                                     IsReadOnly="True"
+                                     Text="{Binding FriendCode, Mode=OneWay}" />
+                            <Button Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    Command="{Binding CopyFriendCodeCommand}"
+                                    Content="Copy"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource CaptionTextStyle}" Text="Display name" />
+                        <TextBox Margin="0,6,0,0"
+                                 Width="320"
+                                 HorizontalAlignment="Left"
+                                 Text="{Binding DisplayName, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <TextBlock Margin="0,14,0,0" Style="{StaticResource CaptionTextStyle}" Text="Relay server address" />
+                        <TextBox Margin="0,6,0,0"
+                                 Width="420"
+                                 HorizontalAlignment="Left"
+                                 Text="{Binding RelayUrl, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="For example https://relay.example.com. Leave blank to stay offline." />
+
+                        <TextBlock Margin="0,8,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Not registered with a relay yet."
+                                   Visibility="{Binding IsRegisteredWithRelay, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Actions -->
+                <Border Margin="0,12,0,0"
+                        Padding="12,9"
+                        Background="{StaticResource DangerBannerBrush}"
+                        BorderBrush="{StaticResource DangerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="{Binding ErrorMessage}"
+                               TextWrapping="Wrap" />
+                </Border>
+
+                <StackPanel Margin="0,16,0,0" Orientation="Horizontal">
+                    <Button MinWidth="120"
+                            Command="{Binding SaveCommand}"
+                            Content="Save"
+                            Style="{StaticResource PrimaryButtonStyle}" />
+                    <Button Margin="10,0,0,0"
+                            Command="{Binding RevertCommand}"
+                            Content="Revert"
+                            Style="{StaticResource SecondaryButtonStyle}" />
+                    <TextBlock Margin="14,0,0,0"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource MutedTextStyle}"
+                               Text="{Binding StatusText}"
+                               Visibility="{Binding StatusText, Converter={StaticResource HasValueToVisibility}}" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

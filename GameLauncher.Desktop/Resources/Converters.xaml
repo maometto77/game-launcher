@@ -1,0 +1,22 @@
+<!--
+    Shared converter instances.
+
+    Declared once at application scope rather than per-view, so item templates
+    inside virtualised lists reuse a single instance instead of allocating one
+    per view.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:helpers="clr-namespace:GameLauncher.Desktop.Helpers">
+
+    <helpers:HasValueToVisibilityConverter x:Key="HasValueToVisibility" />
+    <helpers:BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+    <helpers:BooleanToOpacityConverter x:Key="BooleanToOpacity" />
+    <helpers:InverseBooleanConverter x:Key="InverseBoolean" />
+    <helpers:EnumToBooleanConverter x:Key="EnumToBoolean" />
+    <helpers:PlaytimeConverter x:Key="Playtime" />
+    <helpers:ByteSizeConverter x:Key="ByteSize" />
+    <helpers:RelativeTimeConverter x:Key="RelativeTime" />
+    <helpers:PathToImageConverter x:Key="PathToImage" />
+
+</ResourceDictionary>

@@ -1,0 +1,224 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.GameDetailsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:GameDetailsViewModel}"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="AchievementRowTemplate">
+            <Border Margin="0,0,0,6"
+                    Padding="12,10"
+                    Background="{StaticResource SurfaceBrush}"
+                    CornerRadius="3">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="40" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!--
+                        Locked achievements are dimmed rather than hidden, so the
+                        page shows what is still available to earn.
+                    -->
+                    <Border Grid.Column="0"
+                            Width="34"
+                            Height="34"
+                            Background="{StaticResource SurfaceRaisedBrush}"
+                            CornerRadius="2"
+                            Opacity="{Binding IsUnlocked, Converter={StaticResource BooleanToOpacity}}">
+                        <Grid>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="15"
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       Text="&#x2605;" />
+                            <Image Source="{Binding IconPath, Converter={StaticResource PathToImage}}"
+                                   Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="12,0"
+                                VerticalAlignment="Center"
+                                Opacity="{Binding IsUnlocked, Converter={StaticResource BooleanToOpacity}}">
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding Title}" />
+                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding Description}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Right"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding KindLabel}" />
+                        <TextBlock HorizontalAlignment="Right"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding UnlockedText}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer>
+        <Grid Visibility="{Binding Game, Converter={StaticResource HasValueToVisibility}}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Hero banner -->
+            <Grid Grid.Row="0" Height="260">
+                <Image Source="{Binding Game.HeroArtPath, Converter={StaticResource PathToImage}}"
+                       Stretch="UniformToFill" />
+                <!-- Scrim keeps the title legible over arbitrary artwork -->
+                <Rectangle Fill="{StaticResource HeroScrimBrush}" />
+
+                <Grid Margin="28,0,28,20" VerticalAlignment="Bottom">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Width="110"
+                            Height="165"
+                            Background="{StaticResource SurfaceRaisedBrush}"
+                            CornerRadius="3">
+                        <Grid>
+                            <!-- Neutral placeholder shown only until real cover art exists -->
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="34"
+                                       Foreground="{StaticResource TextDisabledBrush}"
+                                       Text="&#x25A2;" />
+                            <Image Source="{Binding Game.CoverArtPath, Converter={StaticResource PathToImage}}"
+                                   Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1" Margin="20,0,0,6" VerticalAlignment="Bottom">
+                        <TextBlock Style="{StaticResource DisplayTextStyle}"
+                                   Text="{Binding Game.Title}"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <StackPanel Margin="0,14,0,0" Orientation="Horizontal">
+                            <Button Command="{Binding PlayCommand}"
+                                    Content="PLAY"
+                                    Style="{StaticResource PlayButtonStyle}" />
+
+                            <TextBlock Margin="16,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource InGameBrush}"
+                                       Text="Running"
+                                       Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibility}}" />
+
+                            <TextBlock Margin="16,0,0,0"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource DangerHoverBrush}"
+                                       Text="Executable not found"
+                                       Visibility="{Binding IsExecutableMissing, Converter={StaticResource BooleanToVisibility}}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Grid>
+
+            <!-- Body -->
+            <Grid Grid.Row="1" Margin="28,22,28,28">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="300" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: notes and achievements -->
+                <StackPanel Grid.Column="0" Margin="0,0,24,0">
+                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="NOTES" />
+                    <TextBox Margin="0,8,0,0"
+                             Style="{StaticResource MultilineTextBoxStyle}"
+                             Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}" />
+                    <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
+                        <Button Command="{Binding SaveNotesCommand}"
+                                Content="Save notes"
+                                IsEnabled="{Binding HasUnsavedNotes}"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                        <TextBlock Margin="10,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Unsaved changes"
+                                   Visibility="{Binding HasUnsavedNotes, Converter={StaticResource BooleanToVisibility}}" />
+                    </StackPanel>
+
+                    <Grid Margin="0,26,0,0">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="ACHIEVEMENTS" />
+                        <TextBlock HorizontalAlignment="Right"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding AchievementSummary}" />
+                    </Grid>
+
+                    <ItemsControl Margin="0,10,0,0"
+                                  ItemTemplate="{StaticResource AchievementRowTemplate}"
+                                  ItemsSource="{Binding AchievementItems}" />
+                </StackPanel>
+
+                <!-- Right: statistics and actions -->
+                <StackPanel Grid.Column="1">
+                    <Border Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="PLAY TIME" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource TitleTextStyle}"
+                                       Text="{Binding PlaytimeText}" />
+
+                            <Separator Margin="0,14" />
+
+                            <Grid>
+                                <TextBlock Style="{StaticResource MutedTextStyle}" Text="Last played" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="{Binding LastPlayedText}" />
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <TextBlock Style="{StaticResource MutedTextStyle}" Text="Sessions" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="{Binding SessionCountText}" />
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <TextBlock Style="{StaticResource MutedTextStyle}" Text="Install size" />
+                                <TextBlock HorizontalAlignment="Right"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="{Binding InstallSizeText}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="INSTALL" />
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding Game.InstallDir}"
+                                       TextWrapping="Wrap" />
+                            <TextBlock Margin="0,8,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding Game.ExecutablePath}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Button Margin="0,12,0,0"
+                            HorizontalAlignment="Stretch"
+                            Command="{Binding UninstallCommand}"
+                            Content="Remove from library"
+                            Style="{StaticResource DangerButtonStyle}" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
