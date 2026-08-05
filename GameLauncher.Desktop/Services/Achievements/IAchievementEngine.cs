@@ -14,6 +14,18 @@ public sealed record AchievementUnlockedEventArgs(
     DateTimeOffset UnlockedAt);
 
 /// <summary>
+/// A registered provider, described for display and validation.
+/// </summary>
+/// <param name="Key">The provider's dispatch key.</param>
+/// <param name="DisplayName">Human-readable name.</param>
+/// <remarks>
+/// Exposed rather than handing out the providers themselves, so the editor can
+/// offer a choice and warn about a missing one without acquiring the ability to
+/// invoke evaluation directly.
+/// </remarks>
+public sealed record AchievementProviderDescriptor(string Key, string DisplayName);
+
+/// <summary>
 /// The outcome of one evaluation pass.
 /// </summary>
 /// <param name="Evaluated">How many definitions were considered.</param>
@@ -53,6 +65,30 @@ public interface IAchievementEngine
     /// interface, not for the evaluator.
     /// </remarks>
     event EventHandler<AchievementUnlockedEventArgs>? AchievementUnlocked;
+
+    /// <summary>
+    /// Gets every registered provider, ordered by display name.
+    /// </summary>
+    /// <remarks>
+    /// The editor populates its provider list from this, so a newly registered
+    /// provider becomes authorable with no change to the interface.
+    /// </remarks>
+    IReadOnlyList<AchievementProviderDescriptor> Providers { get; }
+
+    /// <summary>
+    /// Determines whether a provider key is backed by a registered provider.
+    /// </summary>
+    /// <param name="providerKey">The key to check.</param>
+    /// <returns>
+    /// <see langword="true"/> when a provider with that key is installed.
+    /// </returns>
+    /// <remarks>
+    /// Lets the interface state plainly that a definition will never be evaluated,
+    /// rather than leaving it looking merely unearned. A definition naming an
+    /// unknown provider stays intact — see
+    /// <see cref="AchievementDefinition.ProviderKey"/>.
+    /// </remarks>
+    bool IsProviderAvailable(string? providerKey);
 
     /// <summary>
     /// Evaluates the achievements belonging to one game.

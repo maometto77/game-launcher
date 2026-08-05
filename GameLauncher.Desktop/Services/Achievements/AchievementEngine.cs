@@ -56,12 +56,25 @@ public sealed class AchievementEngine : IAchievementEngine
         }
 
         _providers = byKey;
+
+        Providers = byKey.Values
+            .Select(provider => new AchievementProviderDescriptor(provider.Key, provider.DisplayName))
+            .OrderBy(descriptor => descriptor.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
         _logger.LogDebug("Achievement engine loaded {Count} providers: {Keys}.",
             byKey.Count, string.Join(", ", byKey.Keys));
     }
 
     /// <inheritdoc />
     public event EventHandler<AchievementUnlockedEventArgs>? AchievementUnlocked;
+
+    /// <inheritdoc />
+    public IReadOnlyList<AchievementProviderDescriptor> Providers { get; }
+
+    /// <inheritdoc />
+    public bool IsProviderAvailable(string? providerKey) =>
+        !string.IsNullOrWhiteSpace(providerKey) && _providers.ContainsKey(providerKey);
 
     /// <inheritdoc />
     public async Task<AchievementEvaluationResult> EvaluateGameAsync(
@@ -103,6 +116,13 @@ public sealed class AchievementEngine : IAchievementEngine
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Deliberately does not route through <see cref="RunAsync"/>. Persistence and
+    /// notification both live there, so testing a rule reaches neither the
+    /// repository nor <see cref="AchievementUnlocked"/> — it asks the provider and
+    /// returns the answer. Keeping the two paths separate is what makes the
+    /// guarantee structural rather than a matter of remembering to skip a step.
+    /// </remarks>
     public async Task<AchievementEvaluation?> TestAsync(
         AchievementDefinition definition,
         Game? game,

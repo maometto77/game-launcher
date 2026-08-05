@@ -1,0 +1,87 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.AchievementToastHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             HorizontalAlignment="Right"
+             VerticalAlignment="Bottom"
+             Margin="0,0,22,22"
+             d:DataContext="{d:DesignInstance Type=viewModels:AchievementToastHostViewModel}"
+             Visibility="{Binding IsVisible, Converter={StaticResource BooleanToVisibility}}"
+             mc:Ignorable="d">
+
+    <!--
+        Bound to whatever the notification service says is current. The service
+        shows one announcement at a time, so this never has to stack or overlap
+        them; when several are earned at once the extra count is shown instead.
+    -->
+    <Border MinWidth="330"
+            MaxWidth="420"
+            Padding="14,12"
+            Background="{StaticResource ChromeBrush}"
+            BorderBrush="{StaticResource AccentBrush}"
+            BorderThickness="1"
+            CornerRadius="4">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18"
+                              Direction="270"
+                              Opacity="0.5"
+                              ShadowDepth="3"
+                              Color="Black" />
+        </Border.Effect>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0"
+                    Width="48"
+                    Height="48"
+                    VerticalAlignment="Top"
+                    Background="{StaticResource SurfaceRaisedBrush}"
+                    CornerRadius="3">
+                <Grid>
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="20"
+                               Foreground="{StaticResource AccentBrush}"
+                               Text="&#x2605;" />
+                    <Image Source="{Binding Current.IconPath, Converter={StaticResource PathToImage}}"
+                           Stretch="UniformToFill" />
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                <TextBlock Foreground="{StaticResource AccentBrush}"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{Binding Current.Heading}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Margin="0,2,0,0"
+                           Foreground="{StaticResource TextPrimaryBrush}"
+                           Style="{StaticResource SubheadingTextStyle}"
+                           Text="{Binding Current.Title}"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Margin="0,2,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{Binding Current.Description}"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="Wrap" />
+                <TextBlock Margin="0,6,0,0"
+                           Style="{StaticResource CaptionTextStyle}"
+                           Text="{Binding PendingText}"
+                           Visibility="{Binding PendingText, Converter={StaticResource HasValueToVisibility}}" />
+            </StackPanel>
+
+            <Button Grid.Column="2"
+                    VerticalAlignment="Top"
+                    Command="{Binding DismissCommand}"
+                    Content="&#x2715;"
+                    Style="{StaticResource IconButtonStyle}"
+                    ToolTip="Dismiss" />
+        </Grid>
+    </Border>
+</UserControl>

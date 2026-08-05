@@ -1,0 +1,37 @@
+# Normalise line endings in the repository to LF, checked out native.
+#
+# The Desktop and Tests projects are Windows-only, but Shared and Relay build and
+# run anywhere .NET 8 does, so the history should not carry CRLF into a Linux
+# checkout.
+* text=auto
+
+# Source and project files are text regardless of what Git guesses.
+*.cs            text diff=csharp
+*.csproj        text
+*.sln           text eol=crlf
+*.props         text
+*.targets       text
+*.xaml          text
+*.json          text
+*.md            text
+*.yml           text
+*.yaml          text
+*.editorconfig  text
+*.gitignore     text
+*.gitattributes text
+
+# Binary, so Git never tries to merge or diff them as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.dll    binary
+*.exe    binary
+*.pdb    binary
+*.snk    binary
+*.zip    binary
+*.7z     binary
+*.rar    binary
+*.db     binary
+*.sqlite binary

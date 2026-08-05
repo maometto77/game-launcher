@@ -1,4 +1,88 @@
-.claude/
-bin/
-obj/
+# ---------------------------------------------------------------------------
+# GameLauncher — .NET / WPF solution
+#
+# Build output was committed before this file existed. Adding a rule does not
+# untrack an already-tracked file, so the history contains one commit that
+# removes it from the index; the working copy was never touched.
+# ---------------------------------------------------------------------------
+
+# Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+publish/
+[Pp]ublish[Oo]utput/
+artifacts/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# Visual Studio / Rider / VS Code
 .vs/
+.idea/
+.vscode/
+*.user
+*.userosscache
+*.userprefs
+*.suo
+*.sln.docstates
+*.sln.iml
+*.dotSettings.user
+
+# Claude Code — local agent state and machine-specific settings
+.claude/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+project.lock.json
+project.fragment.lock.json
+.nuget/
+
+# Test results and coverage
+[Tt]est[Rr]esult*/
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+*.opencover.xml
+
+# SQLite databases. The relay creates gamelauncher-relay.db in its working
+# directory when run with the default connection string, so this keeps a
+# developer's local relay data out of the history.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Local configuration overrides. appsettings.json itself is tracked; anything
+# ending .local.json is for one machine.
+appsettings.*.local.json
+*.local.json
+
+# Logs and scratch files
+*.log
+*.tmp
+*.bak
+*~
+
+# Operating system cruft
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store

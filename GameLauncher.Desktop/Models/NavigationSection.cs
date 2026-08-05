@@ -25,9 +25,14 @@ public enum NavigationSection
     /// <summary>Library-wide achievement overview.</summary>
     Achievements = 4,
 
-    /// <summary>Search across the library.</summary>
-    Search = 5,
-
     /// <summary>Application settings.</summary>
+    /// <remarks>
+    /// Numbered 6 rather than 5 because a <c>Search</c> member briefly sat
+    /// between them. Searching happens within the library page — over titles and
+    /// tags — rather than in a section of its own, so the member was removed once
+    /// it was clear nothing would map to it. The gap is left as it is because
+    /// renumbering an enum gains nothing and would silently change the meaning of
+    /// any value written down elsewhere.
+    /// </remarks>
     Settings = 6
 }

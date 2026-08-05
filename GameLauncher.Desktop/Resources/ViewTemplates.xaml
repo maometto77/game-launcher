@@ -35,4 +35,8 @@
         <views:FriendsView />
     </DataTemplate>
 
+    <DataTemplate DataType="{x:Type viewModels:AchievementsViewModel}">
+        <views:AchievementsView />
+    </DataTemplate>
+
 </ResourceDictionary>

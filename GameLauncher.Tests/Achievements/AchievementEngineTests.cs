@@ -1,5 +1,4 @@
 using System.Text.Json;
-using GameLauncher.Desktop.Infrastructure;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Achievements;
 using GameLauncher.Desktop.Services.Achievements.Configuration;
@@ -271,17 +270,4 @@ public sealed class AchievementEngineTests
         }
     }
 
-    /// <summary>Runs dispatched work inline, so tests need no WPF dispatcher.</summary>
-    private sealed class ImmediateDispatcher : IUiDispatcher
-    {
-        public bool IsOnUiThread => true;
-
-        public void Invoke(Action action) => action();
-
-        public Task InvokeAsync(Action action)
-        {
-            action();
-            return Task.CompletedTask;
-        }
-    }
 }

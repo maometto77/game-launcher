@@ -32,15 +32,30 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// Initialises a new instance.
     /// </summary>
     /// <param name="navigation">Navigation service driving the hosted page.</param>
+    /// <param name="toasts">Achievement toast overlay, hosted above the current page.</param>
     /// <param name="logger">Logger for shell-level diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public MainWindowViewModel(INavigationService navigation, ILogger<MainWindowViewModel> logger)
+    public MainWindowViewModel(
+        INavigationService navigation,
+        AchievementToastHostViewModel toasts,
+        ILogger<MainWindowViewModel> logger)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        Toasts = toasts ?? throw new ArgumentNullException(nameof(toasts));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _navigation.CurrentChanged += OnNavigationCurrentChanged;
     }
+
+    /// <summary>
+    /// Gets the achievement toast overlay.
+    /// </summary>
+    /// <remarks>
+    /// Owned by the shell rather than by a page, because an achievement can be
+    /// earned while the user is looking at any of them — or at none, with a game
+    /// in the foreground.
+    /// </remarks>
+    public AchievementToastHostViewModel Toasts { get; }
 
     /// <summary>
     /// Performs the initial navigation once the window is shown.
@@ -113,6 +128,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 
                 case NavigationSection.Collections:
                     await _navigation.NavigateToAsync<CollectionsViewModel>(cancellationToken).ConfigureAwait(true);
+                    break;
+
+                case NavigationSection.Achievements:
+                    await _navigation.NavigateToAsync<AchievementsViewModel>(cancellationToken).ConfigureAwait(true);
                     break;
 
                 case NavigationSection.Settings:

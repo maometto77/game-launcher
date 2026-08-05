@@ -1,0 +1,216 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.AchievementsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:AchievementsViewModel}"
+             mc:Ignorable="d">
+
+    <UserControl.Resources>
+
+        <!--
+            One achievement row. Every user-visible string here comes from a
+            Display* property, which is what conceals a hidden achievement: the
+            real title never enters the visual tree rather than merely not being
+            drawn.
+        -->
+        <DataTemplate x:Key="AchievementCardTemplate">
+            <Border Margin="0,0,0,6"
+                    Padding="12,10"
+                    Background="{StaticResource SurfaceBrush}"
+                    CornerRadius="3">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Width="42"
+                            Height="42"
+                            Background="{StaticResource SurfaceRaisedBrush}"
+                            CornerRadius="2"
+                            Opacity="{Binding IsUnlocked, Converter={StaticResource BooleanToOpacity}}">
+                        <Grid>
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="17"
+                                       Foreground="{StaticResource TextMutedBrush}"
+                                       Text="&#x2605;" />
+                            <Image Source="{Binding DisplayIconPath, Converter={StaticResource PathToImage}}"
+                                   Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Grid.Column="1"
+                                Margin="12,0"
+                                VerticalAlignment="Center"
+                                Opacity="{Binding IsUnlocked, Converter={StaticResource BooleanToOpacity}}">
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontWeight="SemiBold"
+                                   Text="{Binding DisplayTitle}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding DisplayDescription}"
+                                   TextWrapping="Wrap" />
+
+                        <!-- Progress, shown only while locked and never while concealed -->
+                        <Grid Margin="0,7,0,1" Visibility="{Binding HasProgress, Converter={StaticResource BooleanToVisibility}}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <ProgressBar Grid.Column="0"
+                                         Height="5"
+                                         VerticalAlignment="Center"
+                                         Maximum="100"
+                                         Style="{StaticResource ProgressBarStyle}"
+                                         Value="{Binding ProgressPercent, Mode=OneWay}" />
+
+                            <TextBlock Grid.Column="1"
+                                       Margin="10,0,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding ProgressText}" />
+                        </Grid>
+
+                        <TextBlock Margin="0,6,0,0"
+                                   Foreground="{StaticResource WarningBrush}"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding ProviderWarning}"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding ProviderWarning, Converter={StaticResource HasValueToVisibility}}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Right"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="{Binding UnlockedText}" />
+
+                        <StackPanel Margin="0,4,0,0" HorizontalAlignment="Right" Orientation="Horizontal">
+                            <Button Command="{Binding DataContext.EditCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    Content="Edit"
+                                    Style="{StaticResource LinkButtonStyle}" />
+                            <Button Margin="10,0,0,0"
+                                    Command="{Binding DataContext.DeleteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}"
+                                    Content="Delete"
+                                    Style="{StaticResource LinkButtonStyle}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <!-- One title's worth of achievements -->
+        <DataTemplate x:Key="AchievementGroupTemplate">
+            <StackPanel Margin="0,0,0,22">
+                <Grid>
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                               Style="{StaticResource SubheadingTextStyle}"
+                               Text="{Binding Title}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock HorizontalAlignment="Right"
+                               VerticalAlignment="Center"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Text="{Binding SummaryText}" />
+                </Grid>
+
+                <ProgressBar Height="4"
+                             Margin="0,8,0,12"
+                             Maximum="100"
+                             Style="{StaticResource ProgressBarStyle}"
+                             Value="{Binding CompletionPercent, Mode=OneWay}" />
+
+                <ItemsControl ItemTemplate="{StaticResource AchievementCardTemplate}" ItemsSource="{Binding Items}" />
+            </StackPanel>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <Grid Margin="28,22,28,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Grid.Row="0">
+            <StackPanel>
+                <TextBlock Style="{StaticResource TitleTextStyle}" Text="Achievements" />
+                <TextBlock Margin="0,4,0,0" Style="{StaticResource MutedTextStyle}" Text="{Binding SummaryText}" />
+            </StackPanel>
+
+            <StackPanel HorizontalAlignment="Right" VerticalAlignment="Center" Orientation="Horizontal">
+                <RadioButton Content="All"
+                             GroupName="AchievementFilter"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumToBoolean}, ConverterParameter=All}"
+                             Style="{StaticResource SegmentToggleStyle}" />
+                <RadioButton Content="Unlocked"
+                             GroupName="AchievementFilter"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumToBoolean}, ConverterParameter=Unlocked}"
+                             Style="{StaticResource SegmentToggleStyle}" />
+                <RadioButton Content="Locked"
+                             GroupName="AchievementFilter"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumToBoolean}, ConverterParameter=Locked}"
+                             Style="{StaticResource SegmentToggleStyle}" />
+
+                <Button Margin="14,0,0,0"
+                        Command="{Binding RefreshCommand}"
+                        Content="Refresh"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+                <Button Margin="8,0,0,0"
+                        Command="{Binding NewAchievementCommand}"
+                        Content="New achievement"
+                        Style="{StaticResource PrimaryButtonStyle}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Definitions naming a provider nobody has installed -->
+        <Border Grid.Row="1"
+                Margin="0,16,0,0"
+                Padding="12,9"
+                Background="{StaticResource WarningBannerBrush}"
+                BorderBrush="{StaticResource WarningBrush}"
+                BorderThickness="1"
+                CornerRadius="3"
+                Visibility="{Binding ProviderWarning, Converter={StaticResource HasValueToVisibility}}">
+            <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                       Text="{Binding ProviderWarning}"
+                       TextWrapping="Wrap" />
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,18,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Visibility="{Binding HasAny, Converter={StaticResource BooleanToVisibility}}">
+                <ItemsControl Margin="0,0,8,0"
+                              ItemTemplate="{StaticResource AchievementGroupTemplate}"
+                              ItemsSource="{Binding Groups}" />
+            </ScrollViewer>
+
+            <StackPanel Margin="0,60,0,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Top"
+                        Visibility="{Binding HasAny, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <TextBlock HorizontalAlignment="Center"
+                           Style="{StaticResource SubheadingTextStyle}"
+                           Text="No achievements yet" />
+                <TextBlock Margin="0,6,0,0"
+                           HorizontalAlignment="Center"
+                           MaxWidth="420"
+                           Style="{StaticResource MutedTextStyle}"
+                           Text="Author one against a game in your library and it will be evaluated automatically as you play."
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <Button Margin="0,16,0,0"
+                        HorizontalAlignment="Center"
+                        Command="{Binding NewAchievementCommand}"
+                        Content="New achievement"
+                        Style="{StaticResource PrimaryButtonStyle}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

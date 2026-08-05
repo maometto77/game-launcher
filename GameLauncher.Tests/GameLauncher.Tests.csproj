@@ -6,8 +6,7 @@
       reference a project targeting a higher platform version than its own, and
       UseWPF is required to construct the windows these tests realise.
     -->
-    <TargetFramework>net8.0-windows10.0.17763.0</TargetFramework>
-    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
 
     <IsPackable>false</IsPackable>

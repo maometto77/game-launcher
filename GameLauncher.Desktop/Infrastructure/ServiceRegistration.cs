@@ -8,6 +8,7 @@ using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Launcher;
 using GameLauncher.Desktop.Services.Library;
+using GameLauncher.Desktop.Services.Notifications;
 using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Desktop.ViewModels;
 using GameLauncher.Desktop.Views;
@@ -72,7 +73,8 @@ public static class ServiceRegistration
         services.AddSingleton(new DialogRegistry()
             .Register<AddGameViewModel, AddGameWindow>()
             .Register<ScanFolderViewModel, ScanFolderWindow>()
-            .Register<InstallFromUrlViewModel, InstallFromUrlWindow>());
+            .Register<InstallFromUrlViewModel, InstallFromUrlWindow>()
+            .Register<AchievementEditorViewModel, AchievementEditorWindow>());
 
         // Hosted services start in registration order, and this one must come
         // first: the theme has to be applied before any window is constructed.
@@ -80,6 +82,15 @@ public static class ServiceRegistration
 
         // Migrates the schema before the shell window is shown.
         services.AddHostedService<DatabaseStartupService>();
+
+        // One object in two roles: the notifier the toast overlay binds to, and a
+        // hosted service so it is subscribed to the engine before the watcher
+        // below runs its startup pass. Subscribing later would silently drop any
+        // achievement that pass earns.
+        services.AddSingleton<AchievementNotificationService>();
+        services.AddSingleton<IAchievementNotificationService>(
+            provider => provider.GetRequiredService<AchievementNotificationService>());
+        services.AddHostedService(provider => provider.GetRequiredService<AchievementNotificationService>());
 
         // Decides when evaluation runs. Kept separate from the engine so that
         // scheduling can change without touching a single rule.
@@ -193,17 +204,23 @@ public static class ServiceRegistration
     {
         services.AddSingleton<MainWindowViewModel>();
 
+        // A singleton, like the shell that hosts it: an achievement can be earned
+        // at any moment, so the overlay outlives whichever page is on screen.
+        services.AddSingleton<AchievementToastHostViewModel>();
+
         services.AddTransient<HomeViewModel>();
         services.AddTransient<LibraryViewModel>();
         services.AddTransient<GameDetailsViewModel>();
         services.AddTransient<CollectionsViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<FriendsViewModel>();
+        services.AddTransient<AchievementsViewModel>();
 
         // Dialog view models are transient: each opening starts from a blank form.
         services.AddTransient<AddGameViewModel>();
         services.AddTransient<ScanFolderViewModel>();
         services.AddTransient<InstallFromUrlViewModel>();
+        services.AddTransient<AchievementEditorViewModel>();
     }
 
     /// <summary>Registers windows.</summary>
@@ -218,5 +235,6 @@ public static class ServiceRegistration
         services.AddTransient<AddGameWindow>();
         services.AddTransient<ScanFolderWindow>();
         services.AddTransient<InstallFromUrlWindow>();
+        services.AddTransient<AchievementEditorWindow>();
     }
 }

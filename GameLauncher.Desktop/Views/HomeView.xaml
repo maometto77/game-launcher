@@ -6,12 +6,174 @@
              xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
              d:DataContext="{d:DesignInstance Type=viewModels:HomeViewModel}"
              mc:Ignorable="d">
-    <Grid Margin="28,24">
-        <StackPanel VerticalAlignment="Top">
+
+    <UserControl.Resources>
+
+        <!-- A recently played game, as a clickable cover tile -->
+        <DataTemplate x:Key="RecentGameTemplate">
+            <Button Margin="0,0,12,0"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{Binding DataContext.OpenGameCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                    CommandParameter="{Binding}"
+                    Cursor="Hand"
+                    ToolTip="{Binding Title}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                BorderBrush="Transparent"
+                                BorderThickness="2"
+                                CornerRadius="3">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+
+                <StackPanel Width="132">
+                    <Grid Height="198">
+                        <Border Background="{StaticResource SurfaceRaisedBrush}" CornerRadius="2">
+                            <TextBlock HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       FontSize="44"
+                                       FontWeight="Light"
+                                       Foreground="{StaticResource TextDisabledBrush}"
+                                       Text="{Binding Initials}" />
+                        </Border>
+
+                        <Image Source="{Binding CoverArtPath, Converter={StaticResource PathToImage}}"
+                               Stretch="UniformToFill" />
+
+                        <Border Margin="0,6,6,0"
+                                Padding="5,2"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                Background="{StaticResource MissingBadgeBrush}"
+                                CornerRadius="2"
+                                ToolTip="The executable recorded for this game was not found on disk."
+                                Visibility="{Binding IsExecutableMissing, Converter={StaticResource BooleanToVisibility}}">
+                            <TextBlock FontSize="10"
+                                       FontWeight="SemiBold"
+                                       Foreground="White"
+                                       Text="MISSING" />
+                        </Border>
+                    </Grid>
+
+                    <TextBlock Margin="0,8,0,0"
+                               Foreground="{StaticResource TextPrimaryBrush}"
+                               FontWeight="SemiBold"
+                               Text="{Binding Title}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Style="{StaticResource CaptionTextStyle}" Text="{Binding LastPlayedText}" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="28,24,28,28">
+
             <TextBlock Style="{StaticResource DisplayTextStyle}" Text="Home" />
-            <TextBlock Margin="0,6,0,0"
-                       Style="{StaticResource MutedTextStyle}"
-                       Text="Recently played titles and library highlights." />
+
+            <!-- Populated library -->
+            <StackPanel Visibility="{Binding HasLibrary, Converter={StaticResource BooleanToVisibility}}">
+
+                <StackPanel Margin="0,24,0,0"
+                            Visibility="{Binding HasRecentGames, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="JUMP BACK IN" />
+                    <ItemsControl Margin="0,12,0,0" ItemTemplate="{StaticResource RecentGameTemplate}" ItemsSource="{Binding RecentGames}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Nothing played yet, but games are installed -->
+                <Border Margin="0,24,0,0"
+                        Style="{StaticResource CardBorderStyle}"
+                        Visibility="{Binding HasRecentGames, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   Style="{StaticResource SubheadingTextStyle}"
+                                   Text="Nothing played yet" />
+                        <TextBlock Margin="0,6,0,0"
+                                   Style="{StaticResource MutedTextStyle}"
+                                   Text="Start a game from your library and it will show up here."
+                                   TextWrapping="Wrap" />
+                        <Button Margin="0,14,0,0"
+                                HorizontalAlignment="Left"
+                                Command="{Binding BrowseLibraryCommand}"
+                                Content="Open library"
+                                Style="{StaticResource PrimaryButtonStyle}" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Margin="0,28,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="YOUR LIBRARY" />
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Margin="0,0,6,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="GAMES" />
+                            <TextBlock Margin="0,4,0,0" Style="{StaticResource TitleTextStyle}" Text="{Binding GamesOwnedText}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Margin="6,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="TIME PLAYED" />
+                            <TextBlock Margin="0,4,0,0"
+                                       Style="{StaticResource TitleTextStyle}"
+                                       Text="{Binding PlaytimeText}"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" Margin="6,0,0,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="ACHIEVEMENTS" />
+                            <TextBlock Margin="0,4,0,0" Style="{StaticResource TitleTextStyle}" Text="{Binding AchievementsText}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </StackPanel>
+
+            <!-- Empty library -->
+            <StackPanel Margin="0,60,0,0"
+                        HorizontalAlignment="Center"
+                        Visibility="{Binding HasLibrary, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <TextBlock HorizontalAlignment="Center"
+                           Style="{StaticResource SubheadingTextStyle}"
+                           Text="Your library is empty" />
+                <TextBlock Margin="0,6,0,0"
+                           MaxWidth="420"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource MutedTextStyle}"
+                           Text="Add a game you already have installed, or scan a folder to find several at once."
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <Button Margin="0,16,0,0"
+                        HorizontalAlignment="Center"
+                        Command="{Binding BrowseLibraryCommand}"
+                        Content="Go to library"
+                        Style="{StaticResource PrimaryButtonStyle}" />
+            </StackPanel>
         </StackPanel>
-    </Grid>
+    </ScrollViewer>
 </UserControl>

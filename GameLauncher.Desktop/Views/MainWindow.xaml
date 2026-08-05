@@ -5,6 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:models="clr-namespace:GameLauncher.Desktop.Models"
         xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+        xmlns:views="clr-namespace:GameLauncher.Desktop.Views"
         Title="GameLauncher"
         Width="1280"
         Height="800"
@@ -65,6 +66,12 @@
                                  Content="Collections"
                                  GroupName="Sections"
                                  IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Collections}"
+                                 Style="{StaticResource NavItemStyle}" />
+                    <RadioButton Command="{Binding NavigateCommand}"
+                                 CommandParameter="{x:Static models:NavigationSection.Achievements}"
+                                 Content="Achievements"
+                                 GroupName="Sections"
+                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Achievements}"
                                  Style="{StaticResource NavItemStyle}" />
                 </StackPanel>
 
@@ -129,5 +136,14 @@
                             Content="{Binding CurrentPage}"
                             Focusable="False" />
         </Grid>
+
+        <!--
+            Achievement toasts, last so they draw over whichever page is active
+            and across the sidebar. Collapsed while there is nothing to announce,
+            so the corner it occupies is only unclickable when a toast is up.
+        -->
+        <views:AchievementToastHost Grid.Column="0"
+                                    Grid.ColumnSpan="2"
+                                    DataContext="{Binding Toasts}" />
     </Grid>
 </Window>

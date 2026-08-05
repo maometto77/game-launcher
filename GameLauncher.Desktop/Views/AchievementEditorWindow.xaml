@@ -1,0 +1,302 @@
+<Window x:Class="GameLauncher.Desktop.Views.AchievementEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+        Title="{Binding DialogTitle}"
+        Width="660"
+        Height="720"
+        Background="{StaticResource BackgroundBrush}"
+        d:DataContext="{d:DesignInstance Type=viewModels:AchievementEditorViewModel}"
+        FontFamily="{StaticResource UiFontFamily}"
+        ResizeMode="CanResize"
+        ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner"
+        mc:Ignorable="d">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Style="{StaticResource TitleTextStyle}" Text="{Binding DialogTitle}" />
+            <TextBlock Margin="0,4,0,0"
+                       Style="{StaticResource MutedTextStyle}"
+                       Text="Describe the achievement and the condition that earns it. Testing a rule never unlocks anything." />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" Margin="0,18,0,0" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="0,0,10,0">
+
+                <!-- A definition whose provider has been removed keeps its key -->
+                <Border Margin="0,0,0,14"
+                        Padding="12,9"
+                        Background="{StaticResource WarningBannerBrush}"
+                        BorderBrush="{StaticResource WarningBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Visibility="{Binding IsProviderMissing, Converter={StaticResource BooleanToVisibility}}">
+                    <StackPanel>
+                        <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontWeight="SemiBold"
+                                   Text="This achievement's provider is not installed" />
+                        <TextBlock Margin="0,4,0,0"
+                                   Foreground="{StaticResource TextPrimaryBrush}"
+                                   Text="{Binding MissingProviderKey, StringFormat='It names &quot;{0}&quot;, which nothing here can evaluate. It is kept exactly as it is — including any unlock already recorded — until you choose a provider below.'}"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="BELONGS TO" />
+                <ComboBox Margin="0,6,0,0"
+                          DisplayMemberPath="Title"
+                          ItemsSource="{Binding Targets}"
+                          SelectedItem="{Binding SelectedTarget}" />
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="220" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="TITLE" />
+                        <TextBox Margin="0,6,0,0" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="API NAME" />
+                        <TextBox Margin="0,6,0,0"
+                                 Text="{Binding ApiName, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Stable handle used when synchronising, such as ACH_FINISH_CAMPAIGN. Generated if left blank." />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Margin="0,14,0,0" Style="{StaticResource SectionLabelTextStyle}" Text="DESCRIPTION" />
+                <TextBox Margin="0,6,0,0"
+                         Style="{StaticResource MultilineTextBoxStyle}"
+                         Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}" />
+
+                <Grid Margin="0,14,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="EVALUATED BY" />
+                        <ComboBox Margin="0,6,0,0"
+                                  DisplayMemberPath="DisplayName"
+                                  ItemsSource="{Binding Providers}"
+                                  SelectedItem="{Binding SelectedProvider}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1" Width="120" Margin="0,0,12,0">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="PROGRESS TARGET" />
+                        <TextBox Margin="0,6,0,0"
+                                 Text="{Binding ProgressTargetText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Leave blank for an all-or-nothing achievement." />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Width="90">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="SORT" />
+                        <TextBox Margin="0,6,0,0" Text="{Binding SortOrderText, UpdateSourceTrigger=PropertyChanged}" />
+                    </StackPanel>
+                </Grid>
+
+                <CheckBox Margin="0,14,0,0"
+                          Content="Hidden until unlocked"
+                          IsChecked="{Binding IsHidden}"
+                          ToolTip="The name and description are concealed until the achievement is earned." />
+
+                <!-- Meta rule -->
+                <StackPanel Margin="0,18,0,0" Visibility="{Binding IsMetaRule, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="RULE — MEASURED FROM YOUR LIBRARY" />
+
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="140" />
+                        </Grid.ColumnDefinitions>
+
+                        <ComboBox Grid.Column="0"
+                                  Margin="0,0,10,0"
+                                  ItemsSource="{Binding MetaMetricOptions}"
+                                  SelectedItem="{Binding MetaMetric}" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding MetaThresholdText, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="The value the metric must reach." />
+                    </Grid>
+
+                    <StackPanel Margin="0,10,0,0" Visibility="{Binding NeedsCollection, Converter={StaticResource BooleanToVisibility}}">
+                        <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="COLLECTION" />
+                        <ComboBox Margin="0,6,0,0"
+                                  DisplayMemberPath="Name"
+                                  ItemsSource="{Binding CollectionOptions}"
+                                  SelectedItem="{Binding SelectedCollection}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Save-file rule -->
+                <StackPanel Margin="0,18,0,0" Visibility="{Binding IsSaveFileRule, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="RULE — READ FROM A SAVE FILE" />
+
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding SaveFilePath, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1"
+                                Margin="8,0,0,0"
+                                Command="{Binding BrowseSaveFileCommand}"
+                                Content="Browse…"
+                                Style="{StaticResource SecondaryButtonStyle}" />
+                    </Grid>
+
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="130" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <ComboBox Grid.Column="0"
+                                  Margin="0,0,10,0"
+                                  ItemsSource="{Binding SaveFileFormatOptions}"
+                                  SelectedItem="{Binding SaveFileFormat}" />
+                        <TextBox Grid.Column="1"
+                                 Text="{Binding FieldPath, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="A dotted path for JSON, an XPath for XML, section/key for INI, or a regular expression whose first group holds the value." />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Memory rule -->
+                <StackPanel Margin="0,18,0,0" Visibility="{Binding IsMemoryRule, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="RULE — READ FROM THE RUNNING GAME" />
+                    <TextBlock Margin="0,4,0,0"
+                               Style="{StaticResource CaptionTextStyle}"
+                               Text="Read-only inspection. The offset is relative to the module's base address, so it stays valid across runs."
+                               TextWrapping="Wrap" />
+
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="150" />
+                            <ColumnDefinition Width="110" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox Grid.Column="0"
+                                 Margin="0,0,10,0"
+                                 Text="{Binding ModuleName, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Module name, for example game.exe" />
+                        <TextBox Grid.Column="1"
+                                 Margin="0,0,10,0"
+                                 Style="{StaticResource TextBoxStyle}"
+                                 Text="{Binding Offset, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="Hexadecimal offset, for example 0x0012F3A0" />
+                        <ComboBox Grid.Column="2"
+                                  ItemsSource="{Binding ValueTypeOptions}"
+                                  SelectedItem="{Binding ValueType}" />
+                    </Grid>
+                </StackPanel>
+
+                <!-- Shared by the save-file and memory rules -->
+                <Grid Margin="0,10,0,0" Visibility="{Binding HasComparison, Converter={StaticResource BooleanToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="150" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <ComboBox Grid.Column="0"
+                              Margin="0,0,10,0"
+                              ItemsSource="{Binding ComparisonOptions}"
+                              SelectedItem="{Binding Comparison}" />
+                    <TextBox Grid.Column="1"
+                             Text="{Binding TargetValue, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="The value the reading is compared against." />
+                </Grid>
+
+                <!-- Test read -->
+                <Border Margin="0,18,0,0" Style="{StaticResource CardBorderStyle}">
+                    <StackPanel>
+                        <Grid>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="TEST READ" />
+                                <TextBlock Margin="0,4,0,0"
+                                           MaxWidth="380"
+                                           HorizontalAlignment="Left"
+                                           Style="{StaticResource CaptionTextStyle}"
+                                           Text="Asks the provider what it sees right now. Nothing is saved, no achievement is unlocked, and no progress is recorded."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+
+                            <Button HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Command="{Binding TestCommand}"
+                                    Content="Test read"
+                                    IsEnabled="{Binding IsTesting, Converter={StaticResource InverseBoolean}}"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+                        </Grid>
+
+                        <Border Margin="0,12,0,0"
+                                Padding="10,8"
+                                Background="{StaticResource SurfaceRaisedBrush}"
+                                CornerRadius="3"
+                                Visibility="{Binding HasTestResult, Converter={StaticResource BooleanToVisibility}}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock VerticalAlignment="Top"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource OnlineBrush}"
+                                           Text="&#x2714;"
+                                           Visibility="{Binding TestSucceeded, Converter={StaticResource BooleanToVisibility}}" />
+                                <TextBlock VerticalAlignment="Top"
+                                           FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextMutedBrush}"
+                                           Text="&#x2022;"
+                                           Visibility="{Binding TestSucceeded, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}" />
+                                <TextBlock Margin="8,0,0,0"
+                                           MaxWidth="500"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           Text="{Binding TestResult}"
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Margin="0,14,0,0"
+                        Padding="12,9"
+                        Background="{StaticResource DangerBannerBrush}"
+                        BorderBrush="{StaticResource DangerBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Visibility="{Binding HasError, Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
+                               Text="{Binding ErrorMessage}"
+                               TextWrapping="Wrap" />
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2"
+                    Margin="0,16,0,0"
+                    HorizontalAlignment="Right"
+                    Orientation="Horizontal">
+            <Button Command="{Binding CancelCommand}"
+                    Content="Cancel"
+                    IsCancel="True"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+            <Button Margin="10,0,0,0"
+                    MinWidth="110"
+                    Command="{Binding SaveCommand}"
+                    Content="Save"
+                    IsDefault="True"
+                    Style="{StaticResource PrimaryButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</Window>

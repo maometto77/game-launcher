@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using GameLauncher.Desktop.Helpers;
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Models;
+using GameLauncher.Desktop.Services.Achievements;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Launcher;
@@ -19,6 +20,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
 {
     private readonly IGameRepository _games;
     private readonly IAchievementRepository _achievements;
+    private readonly IAchievementEngine _engine;
     private readonly IPlaySessionRepository _sessions;
     private readonly ILibraryService _library;
     private readonly IGameLaunchService _launcher;
@@ -67,6 +69,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     /// </summary>
     /// <param name="games">Game persistence.</param>
     /// <param name="achievements">Achievement persistence.</param>
+    /// <param name="engine">Consulted only for which providers are installed.</param>
     /// <param name="sessions">Play session persistence.</param>
     /// <param name="library">Library application logic.</param>
     /// <param name="launcher">Launch and playtime tracking.</param>
@@ -77,6 +80,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     public GameDetailsViewModel(
         IGameRepository games,
         IAchievementRepository achievements,
+        IAchievementEngine engine,
         IPlaySessionRepository sessions,
         ILibraryService library,
         IGameLaunchService launcher,
@@ -86,6 +90,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     {
         _games = games ?? throw new ArgumentNullException(nameof(games));
         _achievements = achievements ?? throw new ArgumentNullException(nameof(achievements));
+        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _library = library ?? throw new ArgumentNullException(nameof(library));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -199,10 +204,16 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         var unlocks = await _achievements.GetUnlocksAsync(cancellationToken).ConfigureAwait(true);
         var unlockTimes = unlocks.ToDictionary(unlock => unlock.DefinitionId, unlock => unlock.UnlockedAt);
 
+        var progress = await _achievements
+            .GetProgressAsync(definitions.Select(definition => definition.Id).ToArray(), cancellationToken)
+            .ConfigureAwait(true);
+
         var items = definitions
             .Select(definition => new AchievementItemViewModel(
                 definition,
-                unlockTimes.TryGetValue(definition.Id, out var stamp) ? stamp : null))
+                unlockTimes.TryGetValue(definition.Id, out var stamp) ? stamp : null,
+                progress.TryGetValue(definition.Id, out var recorded) ? recorded.CurrentValue : null,
+                _engine.IsProviderAvailable(definition.ProviderKey)))
 
             // Unlocked first, then alphabetical, so earned achievements are what
             // the user sees without scrolling.

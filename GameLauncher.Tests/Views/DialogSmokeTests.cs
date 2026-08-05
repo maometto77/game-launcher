@@ -2,8 +2,12 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using GameLauncher.Desktop.Models;
+using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Achievements.Providers;
+using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Friends;
+using GameLauncher.Desktop.Services.Notifications;
 using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Desktop.ViewModels;
 using GameLauncher.Desktop.Views;
@@ -130,10 +134,174 @@ public sealed class DialogSmokeTests
     }
 
     [Fact]
-    public void HomePage_realises()
+    public async Task HomePage_realises_its_recently_played_row()
     {
         using var host = new TestAppHost();
-        _wpf.Invoke(() => RealisePage(host.Resolve<HomeViewModel>()));
+        host.SeedSampleData();
+
+        var viewModel = host.Resolve<HomeViewModel>();
+        await viewModel.LoadAsync();
+
+        // The tile template only instantiates when there are tiles.
+        Assert.True(viewModel.HasLibrary);
+        Assert.NotEmpty(viewModel.RecentGames);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task HomePage_realises_its_empty_state()
+    {
+        using var host = new TestAppHost();
+
+        var viewModel = host.Resolve<HomeViewModel>();
+        await viewModel.LoadAsync();
+
+        // A different branch of the markup from the populated one.
+        Assert.False(viewModel.HasLibrary);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task AchievementsPage_realises_every_achievement_state()
+    {
+        using var host = new TestAppHost();
+
+        // Seeded so that one row of each state is templated: unlocked, plainly
+        // locked, locked with progress, hidden, and one whose provider is gone.
+        // An empty list would realise none of them.
+        await SeedAchievementStatesAsync(host);
+
+        var viewModel = host.Resolve<AchievementsViewModel>();
+        await viewModel.LoadAsync();
+
+        Assert.NotEmpty(viewModel.Groups);
+        Assert.Equal(5, viewModel.Groups.SelectMany(group => group.Items).Count());
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task AchievementsPage_realises_when_the_library_has_none()
+    {
+        using var host = new TestAppHost();
+
+        var viewModel = host.Resolve<AchievementsViewModel>();
+        await viewModel.LoadAsync();
+
+        // The empty state is a different branch of the markup from the list.
+        Assert.False(viewModel.HasAny);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task AchievementEditorWindow_realises_each_rule_panel()
+    {
+        using var host = new TestAppHost();
+        await SeedAchievementStatesAsync(host);
+
+        // Each provider shows a different rule panel, so every one is selected in
+        // turn against a realised window.
+        foreach (var providerKey in host.Resolve<IAchievementEngine>().Providers.Select(p => p.Key))
+        {
+            // Constructed on the WPF thread — a Window cannot be built anywhere
+            // else — but loaded from this one, because the view model awaits with
+            // ConfigureAwait(true) and blocking the dispatcher on it would
+            // deadlock against its own continuation.
+            AchievementEditorWindow window = null!;
+            AchievementEditorViewModel viewModel = null!;
+
+            _wpf.Invoke(() =>
+            {
+                window = host.Resolve<AchievementEditorWindow>();
+                viewModel = (AchievementEditorViewModel)window.DataContext;
+                viewModel.Initialize(null);
+            });
+
+            await viewModel.OnNavigatedToAsync();
+
+            _wpf.Invoke(() =>
+            {
+                viewModel.SelectedProvider = viewModel.Providers.Single(p => p.Key == providerKey);
+                Realise(window);
+            });
+        }
+    }
+
+    [Fact]
+    public async Task AchievementEditorWindow_realises_its_missing_provider_banner()
+    {
+        using var host = new TestAppHost();
+
+        var catalog = host.Resolve<ICatalogService>();
+        var achievements = host.Resolve<IAchievementRepository>();
+        var entry = await catalog.EnsureEntryAsync("Hollow Signal", executable: null);
+
+        var id = await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_IMPORTED",
+            Title = "Imported",
+            ProviderKey = "steam-import"
+        });
+
+        var definition = await achievements.GetDefinitionByIdAsync(id);
+
+        AchievementEditorWindow window = null!;
+        AchievementEditorViewModel viewModel = null!;
+
+        _wpf.Invoke(() =>
+        {
+            window = host.Resolve<AchievementEditorWindow>();
+            viewModel = (AchievementEditorViewModel)window.DataContext;
+            viewModel.Initialize(definition);
+        });
+
+        await viewModel.OnNavigatedToAsync();
+
+        Assert.True(viewModel.IsProviderMissing);
+
+        _wpf.Invoke(() => Realise(window));
+    }
+
+    [Fact]
+    public void AchievementToast_realises_while_showing_an_achievement()
+    {
+        using var host = new TestAppHost();
+
+        var notifications = new StubNotifications();
+        using var viewModel = new AchievementToastHostViewModel(notifications, new ImmediateDispatcher());
+
+        notifications.Publish(
+            new AchievementNotification(
+                new AchievementDefinition
+                {
+                    Id = 1,
+                    ApiName = "ACH_TEST",
+                    Title = "Getting started",
+                    Description = "Launch the game for the first time."
+                },
+                new Game { Id = 1, Title = "Hollow Signal", Tags = [] },
+                DateTimeOffset.Now),
+            pending: 2);
+
+        // Collapsed while nothing is showing, so the toast markup only realises
+        // once there is something to announce.
+        Assert.True(viewModel.IsVisible);
+
+        _wpf.Invoke(() =>
+        {
+            var window = new Window
+            {
+                Width = 900,
+                Height = 600,
+                Content = new AchievementToastHost { DataContext = viewModel }
+            };
+
+            Realise(window);
+        });
     }
 
     [Fact]
@@ -279,6 +447,114 @@ public sealed class DialogSmokeTests
         finally
         {
             window.Close();
+        }
+    }
+
+    /// <summary>
+    /// Seeds one achievement in each display state.
+    /// </summary>
+    /// <param name="host">The container to seed through.</param>
+    /// <returns>A task that completes once the rows exist.</returns>
+    /// <remarks>
+    /// Every branch of the achievement template is reached by some row here.
+    /// Realising a page whose rows are all in one state would leave the rest of
+    /// the markup — the progress bar, the concealed row, the provider warning —
+    /// untested.
+    /// </remarks>
+    private static async Task SeedAchievementStatesAsync(TestAppHost host)
+    {
+        var catalog = host.Resolve<ICatalogService>();
+        var games = host.Resolve<IGameRepository>();
+        var achievements = host.Resolve<IAchievementRepository>();
+
+        var entry = await catalog.EnsureEntryAsync("Hollow Signal", executable: null);
+
+        await games.AddAsync(new Game
+        {
+            Title = "Hollow Signal",
+            CatalogId = entry.CatalogId,
+            ExecutablePath = @"C:\Games\Hollow\game.exe",
+            DateAdded = DateTimeOffset.Now,
+            PlaytimeSeconds = 4 * 3600,
+            LastPlayedAt = DateTimeOffset.Now,
+            Tags = []
+        });
+
+        var unlockedId = await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_UNLOCKED",
+            Title = "First steps",
+            Description = "Launch the game once.",
+            ProviderKey = MetaAchievementProvider.ProviderKey,
+            SortOrder = 0
+        });
+
+        await achievements.UnlockAsync(unlockedId, DateTimeOffset.Now.AddHours(-2));
+
+        await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_LOCKED",
+            Title = "Still to come",
+            Description = "Finish the campaign.",
+            ProviderKey = MetaAchievementProvider.ProviderKey,
+            SortOrder = 1
+        });
+
+        var progressId = await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_PROGRESS",
+            Title = "Ten hours in",
+            Description = "Play for ten hours.",
+            ProviderKey = MetaAchievementProvider.ProviderKey,
+            ProgressTarget = 10,
+            SortOrder = 2
+        });
+
+        await achievements.RecordProgressAsync(progressId, 4, DateTimeOffset.Now);
+
+        await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_HIDDEN",
+            Title = "The secret ending",
+            Description = "Reach the observatory before dawn.",
+            IsHidden = true,
+            ProviderKey = MetaAchievementProvider.ProviderKey,
+            SortOrder = 3
+        });
+
+        await achievements.AddDefinitionAsync(new AchievementDefinition
+        {
+            CatalogId = entry.CatalogId,
+            ApiName = "ACH_ORPHAN",
+            Title = "Imported from elsewhere",
+            ProviderKey = "steam-import",
+            SortOrder = 4
+        });
+    }
+
+    /// <summary>
+    /// A notifier the test drives directly, so the toast can be realised without
+    /// waiting on the real dwell timer.
+    /// </summary>
+    private sealed class StubNotifications : IAchievementNotificationService
+    {
+        public event EventHandler<AchievementNotificationChangedEventArgs>? CurrentChanged;
+
+        public AchievementNotification? Current { get; private set; }
+
+        public int PendingCount { get; private set; }
+
+        public void DismissCurrent() => Publish(null, 0);
+
+        public void Publish(AchievementNotification? notification, int pending)
+        {
+            Current = notification;
+            PendingCount = pending;
+            CurrentChanged?.Invoke(this, new AchievementNotificationChangedEventArgs(notification, pending));
         }
     }
 

@@ -59,13 +59,25 @@ public interface IWindowService
     /// Shows the dialog registered for a view model, modally over the active window.
     /// </summary>
     /// <typeparam name="TViewModel">View model identifying the dialog to open.</typeparam>
+    /// <param name="configure">
+    /// Optional initialisation applied to the resolved view model before the
+    /// window is shown.
+    /// </param>
     /// <returns>
     /// <see langword="true"/> when the dialog was accepted, <see langword="false"/>
     /// when cancelled, and <see langword="null"/> when it was dismissed without
     /// either.
     /// </returns>
-    /// <exception cref="InvalidOperationException">No window is registered for the view model.</exception>
-    bool? ShowDialogFor<TViewModel>() where TViewModel : DialogViewModelBase;
+    /// <exception cref="InvalidOperationException">
+    /// No window is registered for the view model, or the registered window does
+    /// not use it as its data context.
+    /// </exception>
+    /// <remarks>
+    /// The callback exists so a dialog can be told what it is editing without the
+    /// caller naming a <see cref="Window"/> type or the view model acquiring a
+    /// constructor parameter that only one of its two uses supplies.
+    /// </remarks>
+    bool? ShowDialogFor<TViewModel>(Action<TViewModel>? configure = null) where TViewModel : DialogViewModelBase;
 }
 
 /// <summary>
@@ -89,7 +101,8 @@ public sealed class WindowService : IWindowService
     }
 
     /// <inheritdoc />
-    public bool? ShowDialogFor<TViewModel>() where TViewModel : DialogViewModelBase
+    public bool? ShowDialogFor<TViewModel>(Action<TViewModel>? configure = null)
+        where TViewModel : DialogViewModelBase
     {
         var windowType = _registry.Resolve(typeof(TViewModel));
 
@@ -97,6 +110,21 @@ public sealed class WindowService : IWindowService
         // closed, so dialogs are registered transient and a cached instance would
         // throw on the second open.
         var window = (Window)_services.GetRequiredService(windowType);
+
+        if (configure is not null)
+        {
+            // Reached through the window rather than resolved separately, because
+            // the window built its own view model from the container and a second
+            // resolution would configure an instance nothing is bound to.
+            if (window.DataContext is not TViewModel viewModel)
+            {
+                throw new InvalidOperationException(
+                    $"{windowType.Name} does not use {typeof(TViewModel).Name} as its data context, " +
+                    "so it cannot be configured before being shown.");
+            }
+
+            configure(viewModel);
+        }
 
         window.Owner = Application.Current?.Windows
             .OfType<Window>()
