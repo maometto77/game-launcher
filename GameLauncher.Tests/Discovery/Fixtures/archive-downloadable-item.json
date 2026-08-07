@@ -1,0 +1,58 @@
+{
+  "created": 1774239392,
+  "d1": "ia601403.us.archive.org",
+  "d2": "ia801403.us.archive.org",
+  "dir": "/9/items/msdos_Doom_1993",
+  "files": [
+    {
+      "name": "doom_screenshot.png",
+      "source": "original",
+      "size": "44100",
+      "format": "PNG",
+      "md5": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "name": "__ia_thumb.jpg",
+      "source": "original",
+      "size": "15824",
+      "format": "Item Tile",
+      "md5": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "name": "Doom_1993.zip",
+      "source": "original",
+      "size": "2359527",
+      "format": "ZIP",
+      "md5": "cccccccccccccccccccccccccccccccc",
+      "crc32": "1e41d812",
+      "sha1": "dddddddddddddddddddddddddddddddddddddddd",
+      "filecount": "42"
+    },
+    {
+      "name": "Doom_1993_files.xml",
+      "source": "original",
+      "format": "Metadata",
+      "md5": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    }
+  ],
+  "files_count": 4,
+  "item_last_updated": 1700000000,
+  "item_size": 2419451,
+  "metadata": {
+    "identifier": "msdos_Doom_1993",
+    "collection": "softwarelibrary_msdos_games",
+    "description": "<p>A landmark <b>first-person shooter</b>.</p><p>Id&nbsp;Software &amp; friends.</p>",
+    "mediatype": "software",
+    "title": "Doom",
+    "year": "1993",
+    "date": "1993-12-10",
+    "creator": "id Software",
+    "publisher": "GT Interactive",
+    "mobygames_genre": "Action",
+    "mobygames_developed_by": "id Software, Inc.",
+    "mobygames_published_by": "GT Interactive Software Corp.",
+    "subject": "shooter"
+  },
+  "server": "ia801403.us.archive.org"
+}

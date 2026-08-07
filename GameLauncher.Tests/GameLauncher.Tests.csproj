@@ -36,4 +36,13 @@
     <Using Include="System.IO" />
   </ItemGroup>
 
+  <!--
+    Captured payloads from the real sources. Parsing is tested against what a
+    site actually returned rather than against a hand-written approximation of
+    it, which is the only way these tests notice a source changing shape.
+  -->
+  <ItemGroup>
+    <None Include="Discovery\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -14,6 +14,26 @@ namespace GameLauncher.Tests.Discovery;
 public sealed class ImportPipelineTests
 {
     [Fact]
+    public async Task No_registered_source_reaches_the_network_under_default_settings()
+    {
+        // This guard exists because registering the real Internet Archive source
+        // silently made every test in this class enumerate 8 898 live items, and
+        // the suite went from ten seconds to hanging. A source that is available
+        // by default is a source that runs without being asked.
+        using var host = new TestAppHost();
+
+        var sources = host.Resolve<ICatalogImportService>().Sources;
+
+        Assert.NotEmpty(sources);
+        Assert.All(sources, source => Assert.False(
+            source.IsAvailable, $"{source.DisplayName} must not be available until discovery is switched on"));
+
+        var result = await host.Resolve<ICatalogImportService>().RunAsync(new ImportRunOptions());
+
+        Assert.Empty(result.Sources);
+    }
+
+    [Fact]
     public async Task An_import_creates_a_listing_per_game()
     {
         var source = new FakeCatalogSource()
@@ -123,6 +143,31 @@ public sealed class ImportPipelineTests
 
         Assert.Equal(2, source.FetchCount);
         Assert.Equal(0, second.ItemsChanged);
+    }
+
+    [Fact]
+    public async Task Noise_in_the_raw_payload_does_not_look_like_a_change()
+    {
+        // Found running against the live Internet Archive: every metadata
+        // response is stamped with the time it was generated, so hashing the raw
+        // payload made an unchanged item look changed on every pass and defeated
+        // the incremental path entirely.
+        var source = new FakeCatalogSource().Add("Doom", 1993);
+
+        using var host = Host(source);
+        var import = host.Resolve<ICatalogImportService>();
+
+        await import.RunAsync(new ImportRunOptions());
+
+        source.Replace("doom", listing => listing with
+        {
+            RawPayload = $$"""{"title":"Doom","generated":"{{DateTimeOffset.UtcNow:O}}"}"""
+        });
+
+        var second = await import.RunAsync(new ImportRunOptions());
+
+        Assert.Equal(0, second.ItemsChanged);
+        Assert.False(second.HasChanges);
     }
 
     [Fact]

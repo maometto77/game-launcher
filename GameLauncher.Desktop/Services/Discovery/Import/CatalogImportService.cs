@@ -488,7 +488,14 @@ public sealed class CatalogImportService : ICatalogImportService
             .ConfigureAwait(false);
 
         var normalizedJson = JsonSerializer.Serialize(listing, JsonOptions);
-        var contentHash = ComputeHash(normalizedJson);
+
+        // Hashed without the raw payload. The payload is provenance, not
+        // content, and it routinely carries per-response noise — the Internet
+        // Archive stamps every metadata response with the time it was generated.
+        // Including it made a re-fetch of an unchanged item look like a change,
+        // which defeated the whole incremental path.
+        var contentHash = ComputeHash(
+            JsonSerializer.Serialize(listing with { RawPayload = string.Empty }, JsonOptions));
 
         // The second short circuit: the source did change the item, but nothing
         // we care about is different. Common when a site touches a timestamp.

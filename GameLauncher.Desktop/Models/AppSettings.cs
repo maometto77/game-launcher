@@ -162,6 +162,44 @@ public sealed record AppSettings
     [JsonPropertyName("steamGridDbApiKey")]
     public string? SteamGridDbApiKey { get; init; }
 
+    /// <summary>
+    /// Whether the discovery catalogue refreshes itself in the background.
+    /// </summary>
+    /// <remarks>
+    /// Off leaves whatever has already been imported browsable. Discovery is an
+    /// addition to the launcher, never a prerequisite for it — the library, the
+    /// installs and the achievements all work with this switched off.
+    /// </remarks>
+    [JsonPropertyName("discoveryEnabled")]
+    public bool DiscoveryEnabled { get; init; }
+
+    /// <summary>
+    /// Internet Archive collections to import.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A setting rather than a constant because it is the whole scope of what
+    /// gets imported. <c>softwarelibrary_msdos_games</c> holds about 8 900
+    /// items; the parent <c>softwarelibrary</c> holds over 230 000 and is far too
+    /// broad to take wholesale.
+    /// </para>
+    /// <para>
+    /// Empty means the source has nothing to do and reports itself unavailable,
+    /// which is not an error.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("internetArchiveCollections")]
+    public IReadOnlyList<string> InternetArchiveCollections { get; init; } =
+        ["softwarelibrary_msdos_games"];
+
+    /// <summary>Hours between background catalogue refreshes.</summary>
+    [JsonPropertyName("discoveryRefreshHours")]
+    public int DiscoveryRefreshHours { get; init; } = 24;
+
+    /// <summary>Largest size the cached catalogue artwork may reach, in megabytes.</summary>
+    [JsonPropertyName("discoveryImageCacheMegabytes")]
+    public int DiscoveryImageCacheMegabytes { get; init; } = 500;
+
     /// <summary>Gets a value indicating whether a relay has been configured.</summary>
     [JsonIgnore]
     public bool HasRelay => !string.IsNullOrWhiteSpace(RelayUrl);

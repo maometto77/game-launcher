@@ -5,9 +5,11 @@ using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
+using GameLauncher.Desktop.Services.Discovery;
 using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
+using GameLauncher.Desktop.Services.Discovery.Sources;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Launcher;
@@ -101,9 +103,14 @@ public static class ServiceRegistration
         // scheduling can change without touching a single rule.
         services.AddHostedService<AchievementWatcherService>();
 
-        // Last: registration, connection and sync all depend on settings and the
+        // Registration, connection and sync all depend on settings and the
         // database already being ready. Nothing here can block startup.
         services.AddHostedService<RelayCoordinatorService>();
+
+        // Last of all, and for the same reason as the relay: it depends on
+        // settings and the database, nothing depends on it, and a slow or
+        // unreachable source must never be felt as the launcher starting slowly.
+        services.AddHostedService<CatalogImportBackgroundService>();
     }
 
     /// <summary>
@@ -174,7 +181,19 @@ public static class ServiceRegistration
         // Sources are an open set dispatched by key, like achievement providers:
         // adding one is a class and a line here. The import service throws at
         // construction if two ever claim the same key.
+        services.AddSingleton<ICatalogSource, InternetArchiveCatalogSource>();
+
         services.AddSingleton<ICatalogImportService, CatalogImportService>();
+
+        // A generous but finite timeout. Metadata responses are small; a search
+        // page over a large collection is not, and the download client's infinite
+        // timeout would be wrong here — a stalled catalogue request should give
+        // up rather than hold a background pass open indefinitely.
+        services.AddHttpClient(InternetArchiveCatalogSource.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
 
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();
