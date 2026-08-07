@@ -5,6 +5,7 @@ using GameLauncher.Desktop.Helpers;
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Launcher;
@@ -21,6 +22,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     private readonly IGameRepository _games;
     private readonly IAchievementRepository _achievements;
     private readonly IAchievementEngine _engine;
+    private readonly IArtworkService _artwork;
     private readonly IPlaySessionRepository _sessions;
     private readonly ILibraryService _library;
     private readonly IGameLaunchService _launcher;
@@ -64,12 +66,22 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     [ObservableProperty]
     private bool _hasUnsavedNotes;
 
+    [ObservableProperty]
+    private bool _isFindingArtwork;
+
+    [ObservableProperty]
+    private string? _artworkStatus;
+
+    [ObservableProperty]
+    private string _artworkSearchTitle = string.Empty;
+
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
     /// <param name="games">Game persistence.</param>
     /// <param name="achievements">Achievement persistence.</param>
     /// <param name="engine">Consulted only for which providers are installed.</param>
+    /// <param name="artwork">Finds and applies cover and background images.</param>
     /// <param name="sessions">Play session persistence.</param>
     /// <param name="library">Library application logic.</param>
     /// <param name="launcher">Launch and playtime tracking.</param>
@@ -81,6 +93,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         IGameRepository games,
         IAchievementRepository achievements,
         IAchievementEngine engine,
+        IArtworkService artwork,
         IPlaySessionRepository sessions,
         ILibraryService library,
         IGameLaunchService launcher,
@@ -91,6 +104,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         _games = games ?? throw new ArgumentNullException(nameof(games));
         _achievements = achievements ?? throw new ArgumentNullException(nameof(achievements));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _artwork = artwork ?? throw new ArgumentNullException(nameof(artwork));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _library = library ?? throw new ArgumentNullException(nameof(library));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
@@ -104,6 +118,17 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
 
     /// <summary>Gets a value indicating whether the game can currently be launched.</summary>
     public bool CanPlay => Game is not null && !IsRunning && !IsExecutableMissing;
+
+    /// <summary>Gets a value indicating whether artwork lookup is available.</summary>
+    public bool CanFindArtwork => _artwork.IsConfigured && !IsFindingArtwork;
+
+    /// <summary>Gets the name of the configured artwork source.</summary>
+    public string ArtworkProviderName => _artwork.ProviderName;
+
+    /// <summary>
+    /// Gets a value indicating whether the artwork source still needs configuring.
+    /// </summary>
+    public bool NeedsArtworkKey => !_artwork.IsConfigured;
 
     /// <inheritdoc />
     public Task InitializeAsync(int parameter, CancellationToken cancellationToken = default)
@@ -149,6 +174,12 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
             Game = game;
             Notes = game.Notes ?? string.Empty;
             HasUnsavedNotes = false;
+
+            ArtworkSearchTitle = game.Title;
+            ArtworkStatus = null;
+            OnPropertyChanged(nameof(CanFindArtwork));
+            OnPropertyChanged(nameof(NeedsArtworkKey));
+            FindArtworkCommand.NotifyCanExecuteChanged();
 
             IsRunning = _launcher.IsRunning(game.Id);
             IsExecutableMissing = !game.ExecutableExists;
@@ -262,6 +293,62 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     /// <returns>A task that completes when the notes have been stored.</returns>
     [RelayCommand]
     private Task SaveNotesAsync() => PersistNotesAsync(CancellationToken.None);
+
+    /// <summary>
+    /// Looks up cover and background artwork and applies it to this game.
+    /// </summary>
+    /// <returns>A task that completes when the lookup has finished.</returns>
+    /// <remarks>
+    /// Deliberately manual rather than automatic on import. A lookup is a network
+    /// call to a third party keyed on a guessed title, and quietly attaching the
+    /// wrong game's artwork is worse than showing none.
+    /// </remarks>
+    [RelayCommand(CanExecute = nameof(CanFindArtwork))]
+    private async Task FindArtworkAsync()
+    {
+        if (Game is null)
+        {
+            return;
+        }
+
+        IsFindingArtwork = true;
+        ArtworkStatus = $"Searching {ArtworkProviderName}…";
+        ClearError();
+
+        try
+        {
+            var result = await _artwork
+                .ApplyArtworkAsync(Game, ArtworkSearchTitle, CancellationToken.None)
+                .ConfigureAwait(true);
+
+            ArtworkStatus = result.Message;
+
+            if (result.FoundAnything)
+            {
+                // Reassigned so the bindings see a change; the paths are the same
+                // objects the service just updated.
+                OnPropertyChanged(nameof(Game));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Finding artwork for {Title} failed.", Game.Title);
+            ArtworkStatus = null;
+            SetErrorMessage($"Artwork could not be fetched: {ex.Message}");
+        }
+        finally
+        {
+            IsFindingArtwork = false;
+        }
+    }
+
+    /// <summary>Keeps the artwork button in step with the lookup.</summary>
+    /// <param name="value">Whether a lookup is running.</param>
+    partial void OnIsFindingArtworkChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanFindArtwork));
+        FindArtworkCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// Removes the game from the library, offering to delete its files.

@@ -1,6 +1,7 @@
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Services.Achievements;
 using GameLauncher.Desktop.Services.Achievements.Providers;
+using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
@@ -144,6 +145,20 @@ public static class ServiceRegistration
         services.AddSingleton<IAchievementProvider, ManualAchievementProvider>();
 
         services.AddSingleton<IAchievementEngine, AchievementEngine>();
+
+        // Artwork lookup. The provider is a seam so a second source can be added
+        // without touching the service that downloads and applies the result.
+        services.AddSingleton<IArtworkProvider, SteamGridDbArtworkProvider>();
+        services.AddSingleton<IArtworkService, ArtworkService>();
+
+        // A short timeout like the relay client, not the download client's
+        // infinite one: artwork requests are small, and a slow artwork lookup
+        // should give up rather than leave a button spinning.
+        services.AddHttpClient(SteamGridDbArtworkProvider.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
 
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();

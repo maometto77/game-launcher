@@ -222,6 +222,39 @@
 
                     <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
                         <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="ARTWORK" />
+
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="Search a different title if the match is wrong."
+                                       TextWrapping="Wrap" />
+
+                            <TextBox Margin="0,8,0,0"
+                                     Text="{Binding ArtworkSearchTitle, UpdateSourceTrigger=PropertyChanged}" />
+
+                            <Button Margin="0,8,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding FindArtworkCommand}"
+                                    Content="Find artwork"
+                                    Style="{StaticResource SecondaryButtonStyle}" />
+
+                            <TextBlock Margin="0,8,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding ArtworkStatus}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding ArtworkStatus, Converter={StaticResource HasValueToVisibility}}" />
+
+                            <TextBlock Margin="0,8,0,0"
+                                       Foreground="{StaticResource WarningBrush}"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="Add a SteamGridDB API key in Settings to enable artwork lookup."
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding NeedsArtworkKey, Converter={StaticResource BooleanToVisibility}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
                             <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="INSTALL" />
                             <TextBlock Margin="0,6,0,0"
                                        Style="{StaticResource CaptionTextStyle}"

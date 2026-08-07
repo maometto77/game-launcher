@@ -149,6 +149,19 @@ public sealed record AppSettings
     [JsonPropertyName("relayIdentities")]
     public IReadOnlyList<RelayIdentity> RelayIdentities { get; init; } = [];
 
+    /// <summary>
+    /// API key for SteamGridDB, or <see langword="null"/> when artwork lookup is
+    /// not configured.
+    /// </summary>
+    /// <remarks>
+    /// A secret, though a low-value one: it identifies the requester to a public
+    /// artwork index and grants nothing else. The settings page masks it and it is
+    /// never logged, for the same reason the relay token is not. Absent, artwork
+    /// lookup is simply unavailable and games render generated tiles.
+    /// </remarks>
+    [JsonPropertyName("steamGridDbApiKey")]
+    public string? SteamGridDbApiKey { get; init; }
+
     /// <summary>Gets a value indicating whether a relay has been configured.</summary>
     [JsonIgnore]
     public bool HasRelay => !string.IsNullOrWhiteSpace(RelayUrl);

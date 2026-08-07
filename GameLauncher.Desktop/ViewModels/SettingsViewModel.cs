@@ -54,6 +54,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _themeChangePending;
 
+    [ObservableProperty]
+    private string _steamGridDbApiKey = string.Empty;
+
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
@@ -88,6 +91,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         // actually use; the local one otherwise.
         FriendCode = current.EffectiveFriendCode;
         IsRegisteredWithRelay = current.IsRegistered;
+        SteamGridDbApiKey = current.SteamGridDbApiKey ?? string.Empty;
 
         ThemeChangePending = false;
         StatusText = null;
@@ -181,7 +185,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 AutoScanOnStartup = AutoScanOnStartup,
                 Theme = SelectedTheme,
                 RelayUrl = relay.Length == 0 ? null : relay,
-                DisplayName = name
+                DisplayName = name,
+                SteamGridDbApiKey = SteamGridDbApiKey.Trim() is { Length: > 0 } artworkKey ? artworkKey : null
             }).ConfigureAwait(true);
 
             ThemeChangePending = SelectedTheme != previous.Theme;

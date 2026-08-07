@@ -106,6 +106,16 @@ public sealed class WpfTestHost : IDisposable
         {
             var application = new App();
 
+            // Without this the Application defaults to OnLastWindowClose, and the
+            // smoke tests show a window and close it again. Closing the last one
+            // shuts the whole Application down, after which every later window
+            // throws "The Application object is being shut down" and the
+            // dispatcher stops — so the run does not merely fail, it hangs.
+            //
+            // This host owns the Application for the entire test run and disposes
+            // it explicitly, so no window closing should ever end it.
+            application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
             // Loads App.xaml, which is what populates Application.Current.Resources
             // with the theme dictionaries the windows resolve against.
             application.InitializeComponent();
