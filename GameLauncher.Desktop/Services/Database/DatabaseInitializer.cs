@@ -443,6 +443,311 @@ public sealed class DatabaseInitializer : IDatabaseInitializer
 
         CREATE INDEX IF NOT EXISTS IX_AchievementDefinition_Provider
             ON AchievementDefinition (ProviderKey);
+        """,
+
+        // v7 — the discovery catalogue.
+        //
+        // This is a new subsystem, not an extension of CatalogEntry. That table is
+        // the shared identity of a title the user has *installed*: its rows are
+        // minted from a fingerprint of an executable, its primary key is rewritten
+        // by promotion and demotion, and a relay is authoritative for it. A
+        // discovery listing has no executable to fingerprint, is never
+        // synchronised, and its identifier is never rewritten. Hanging thousands
+        // of scraped rows off CatalogEntry would drag them through every relay
+        // migration and put third-party metadata into the sync path.
+        //
+        // The two meet in exactly one place: Game.ListingId, written once when a
+        // listing is installed. Identity continues to be minted by the existing
+        // import path from the executable that is then on disk.
+        //
+        // Genre, developer, publisher and platform are normalised rather than
+        // stored inline. Unlike Game.Tags — which is JSON because tags are read
+        // and written as a set alongside one game — these are filtered and
+        // faceted across the whole catalogue, which JSON answers only with a full
+        // scan and a per-row parse. Normalising also means a misspelling is fixed
+        // in one row instead of four hundred.
+        """
+        -- ---------------------------------------------------------------
+        -- Lookup entities. NormalizedName is what deduplicates them, so that
+        -- "MicroProse", "MicroProse Software, Inc." and "MICROPROSE" become one
+        -- row that can be renamed once and corrected everywhere.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS Genre (
+            Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name           TEXT    NOT NULL,
+            NormalizedName TEXT    NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Genre_Normalized ON Genre (NormalizedName);
+
+        CREATE TABLE IF NOT EXISTS Developer (
+            Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name           TEXT    NOT NULL,
+            NormalizedName TEXT    NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Developer_Normalized ON Developer (NormalizedName);
+
+        CREATE TABLE IF NOT EXISTS Publisher (
+            Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name           TEXT    NOT NULL,
+            NormalizedName TEXT    NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Publisher_Normalized ON Publisher (NormalizedName);
+
+        CREATE TABLE IF NOT EXISTS Platform (
+            Id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            Name           TEXT    NOT NULL,
+            NormalizedName TEXT    NOT NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_Platform_Normalized ON Platform (NormalizedName);
+
+        -- ---------------------------------------------------------------
+        -- The merged listing. Every column here is derived from ListingSource
+        -- rows and can be rebuilt from them without touching the network.
+        --
+        -- RowId exists because a listing is addressed by a text identifier and
+        -- several joins are cheaper against an integer. It is never displayed.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS CatalogListing (
+            RowId              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ListingId          TEXT    NOT NULL,
+            Title              TEXT    NOT NULL,
+            SortTitle          TEXT    NOT NULL DEFAULT '',
+            Year               INTEGER NULL,
+            DeveloperId        INTEGER NULL,
+            PublisherId        INTEGER NULL,
+            Description        TEXT    NULL,
+            SystemRequirements TEXT    NULL,
+            MatchKey           TEXT    NOT NULL DEFAULT '',
+            CoverImageUrl      TEXT    NULL,
+            CoverImagePath     TEXT    NULL,
+            PrimarySourceKey   TEXT    NOT NULL DEFAULT '',
+
+            -- Which source won each scalar field, as JSON. One column rather than
+            -- a table because it is read by a human diagnosing a merge rule and
+            -- never joined or filtered.
+            FieldProvenance    TEXT    NULL,
+
+            -- Corrections the user made by hand, applied after the merge so that
+            -- re-importing cannot discard them and the merge stays pure.
+            UserOverride       TEXT    NULL,
+
+            IsDownloadable     INTEGER NOT NULL DEFAULT 1,
+            IsHidden           INTEGER NOT NULL DEFAULT 0,
+            ContentHash        TEXT    NOT NULL DEFAULT '',
+            CreatedAt          TEXT    NOT NULL,
+            UpdatedAt          TEXT    NOT NULL,
+
+            CONSTRAINT FK_CatalogListing_Developer FOREIGN KEY (DeveloperId)
+                REFERENCES Developer (Id) ON DELETE SET NULL,
+            CONSTRAINT FK_CatalogListing_Publisher FOREIGN KEY (PublisherId)
+                REFERENCES Publisher (Id) ON DELETE SET NULL
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_CatalogListing_ListingId ON CatalogListing (ListingId);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_MatchKey  ON CatalogListing (MatchKey);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_SortTitle ON CatalogListing (SortTitle COLLATE NOCASE);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_Year      ON CatalogListing (Year);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_Developer ON CatalogListing (DeveloperId);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_Publisher ON CatalogListing (PublisherId);
+        CREATE INDEX IF NOT EXISTS IX_CatalogListing_Created   ON CatalogListing (CreatedAt DESC);
+
+        -- ---------------------------------------------------------------
+        -- Many-to-many facets.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS ListingGenre (
+            ListingId TEXT    NOT NULL,
+            GenreId   INTEGER NOT NULL,
+
+            PRIMARY KEY (ListingId, GenreId),
+
+            CONSTRAINT FK_ListingGenre_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE,
+            CONSTRAINT FK_ListingGenre_Genre FOREIGN KEY (GenreId)
+                REFERENCES Genre (Id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ListingGenre_Genre ON ListingGenre (GenreId);
+
+        CREATE TABLE IF NOT EXISTS ListingPlatform (
+            ListingId  TEXT    NOT NULL,
+            PlatformId INTEGER NOT NULL,
+
+            PRIMARY KEY (ListingId, PlatformId),
+
+            CONSTRAINT FK_ListingPlatform_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE,
+            CONSTRAINT FK_ListingPlatform_Platform FOREIGN KEY (PlatformId)
+                REFERENCES Platform (Id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ListingPlatform_Platform ON ListingPlatform (PlatformId);
+
+        -- Tags stop short of a lookup entity on purpose. They are free-form and
+        -- open-vocabulary, so a Tag table would accumulate thousands of
+        -- single-use rows; they are displayed rather than faceted, so nothing
+        -- would query it.
+        CREATE TABLE IF NOT EXISTS ListingTag (
+            ListingId TEXT NOT NULL,
+            Tag       TEXT NOT NULL,
+
+            PRIMARY KEY (ListingId, Tag),
+
+            CONSTRAINT FK_ListingTag_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE
+        );
+
+        -- ---------------------------------------------------------------
+        -- The evidence behind the merged row. This is the authoritative input;
+        -- CatalogListing is derived. Keeping the raw payload is what allows a
+        -- normalisation or merge-rule fix to be applied to the whole catalogue
+        -- offline, and it is the only way to diagnose a parser that produced a
+        -- wrong answer rather than no answer.
+        --
+        -- Keyed by (SourceKey, SourceItemId): one row per item per source. The
+        -- listing it contributes to can change when a re-match moves it.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS ListingSource (
+            SourceKey         TEXT NOT NULL,
+            SourceItemId      TEXT NOT NULL,
+            ListingId         TEXT NOT NULL,
+            SourceUrl         TEXT NOT NULL DEFAULT '',
+            NormalizedJson    TEXT NOT NULL DEFAULT '',
+            RawPayload        BLOB NULL,
+            SourceUpdatedAt   TEXT NULL,
+            FetchedAt         TEXT NOT NULL,
+            SourceContentHash TEXT NOT NULL DEFAULT '',
+            Rank              INTEGER NOT NULL DEFAULT 0,
+            LastError         TEXT NULL,
+
+            PRIMARY KEY (SourceKey, SourceItemId),
+
+            CONSTRAINT FK_ListingSource_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ListingSource_Listing ON ListingSource (ListingId);
+        CREATE INDEX IF NOT EXISTS IX_ListingSource_Fetched ON ListingSource (SourceKey, FetchedAt);
+
+        -- ---------------------------------------------------------------
+        -- Mirrors and images. Several rows per listing is the normal case: the
+        -- same file is served from more than one host, and sources are unioned
+        -- rather than allowed to replace one another.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS ListingDownload (
+            Id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            ListingId  TEXT    NOT NULL,
+            SourceKey  TEXT    NOT NULL DEFAULT '',
+            Url        TEXT    NOT NULL,
+            FileName   TEXT    NULL,
+            SizeBytes  INTEGER NULL,
+            Md5        TEXT    NULL,
+            Sha1       TEXT    NULL,
+            Format     TEXT    NULL,
+            Kind       INTEGER NOT NULL DEFAULT 0,
+            MirrorRank INTEGER NOT NULL DEFAULT 0,
+
+            CONSTRAINT FK_ListingDownload_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_ListingDownload_Url ON ListingDownload (ListingId, Url);
+        CREATE INDEX IF NOT EXISTS IX_ListingDownload_Listing    ON ListingDownload (ListingId, MirrorRank);
+
+        CREATE TABLE IF NOT EXISTS ListingImage (
+            Id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            ListingId TEXT    NOT NULL,
+            SourceKey TEXT    NOT NULL DEFAULT '',
+            Kind      INTEGER NOT NULL DEFAULT 0,
+            RemoteUrl TEXT    NOT NULL,
+            LocalPath TEXT    NULL,
+            Width     INTEGER NOT NULL DEFAULT 0,
+            Height    INTEGER NOT NULL DEFAULT 0,
+            SortOrder INTEGER NOT NULL DEFAULT 0,
+
+            CONSTRAINT FK_ListingImage_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS UX_ListingImage_Url  ON ListingImage (ListingId, RemoteUrl);
+        CREATE INDEX IF NOT EXISTS IX_ListingImage_Listing     ON ListingImage (ListingId, Kind, SortOrder);
+
+        -- ---------------------------------------------------------------
+        -- Many match keys resolve to one listing, in the same spirit as
+        -- CatalogAlias: one title legitimately spells its name several ways, and
+        -- a manual "these are the same game" decision has to survive re-import.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS ListingAlias (
+            MatchKey  TEXT NOT NULL PRIMARY KEY,
+            ListingId TEXT NOT NULL,
+            Source    TEXT NOT NULL DEFAULT '',
+            CreatedAt TEXT NOT NULL,
+
+            CONSTRAINT FK_ListingAlias_Listing FOREIGN KEY (ListingId)
+                REFERENCES CatalogListing (ListingId) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_ListingAlias_Listing ON ListingAlias (ListingId);
+
+        -- ---------------------------------------------------------------
+        -- Import bookkeeping. Cursor is what lets a pass killed halfway resume
+        -- instead of starting over, and the item counters are what reveal a
+        -- parser that has silently started returning nothing.
+        -- ---------------------------------------------------------------
+        CREATE TABLE IF NOT EXISTS CatalogImportRun (
+            RunId         INTEGER PRIMARY KEY AUTOINCREMENT,
+            SourceKey     TEXT    NOT NULL,
+            Mode          INTEGER NOT NULL DEFAULT 0,
+            StartedAt     TEXT    NOT NULL,
+            CompletedAt   TEXT    NULL,
+            Cursor        TEXT    NULL,
+            ItemsSeen     INTEGER NOT NULL DEFAULT 0,
+            ItemsChanged  INTEGER NOT NULL DEFAULT 0,
+            ItemsFailed   INTEGER NOT NULL DEFAULT 0,
+            ListingsAdded INTEGER NOT NULL DEFAULT 0,
+            LastError     TEXT    NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS IX_CatalogImportRun_Source ON CatalogImportRun (SourceKey, StartedAt DESC);
+
+        -- ---------------------------------------------------------------
+        -- Full-text search, present from the first version of this schema.
+        --
+        -- LIKE '%term%' cannot use an index and cannot rank, so it degrades
+        -- linearly and offers no relevance ordering. Adding FTS later would mean
+        -- a second migration plus a backfill of every row, so it goes in now.
+        --
+        -- Developer, publisher and genre are flattened into the index on
+        -- purpose: search wants one document per listing, and joining at query
+        -- time would defeat the index. The normalised tables stay authoritative;
+        -- these columns are a projection the repository rewrites whenever it
+        -- writes a listing, inside the same transaction.
+        --
+        -- remove_diacritics 2 is why typing "Pokemon" finds "Pokémon", matching
+        -- what TitleNormalizer does for matching.
+        -- ---------------------------------------------------------------
+        CREATE VIRTUAL TABLE IF NOT EXISTS CatalogListingSearch USING fts5 (
+            ListingId UNINDEXED,
+            Title,
+            Developer,
+            Publisher,
+            Genres,
+            Description,
+            tokenize = 'unicode61 remove_diacritics 2'
+        );
+
+        -- ---------------------------------------------------------------
+        -- The single link between discovery and the library, written once when a
+        -- listing is installed. Deliberately nullable and deliberately not
+        -- involved in catalog identity: a game added by any other route simply
+        -- has no listing.
+        -- ---------------------------------------------------------------
+        ALTER TABLE Game ADD COLUMN ListingId TEXT NULL REFERENCES CatalogListing (ListingId) ON DELETE SET NULL;
+
+        CREATE INDEX IF NOT EXISTS IX_Game_ListingId ON Game (ListingId);
         """
     ];
 

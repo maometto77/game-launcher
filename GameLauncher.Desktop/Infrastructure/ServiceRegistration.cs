@@ -5,6 +5,8 @@ using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
+using GameLauncher.Desktop.Services.Discovery.Matching;
+using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Launcher;
@@ -161,6 +163,13 @@ public static class ServiceRegistration
             client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
         });
 
+        // Discovery. Normalisation, matching and merging are pure — no database,
+        // no network, no clock — which is what lets every interesting rule be
+        // tested against a captured payload instead of a live site.
+        services.AddSingleton<IListingNormalizer, ListingNormalizer>();
+        services.AddSingleton<IListingMatcher, ListingMatcher>();
+        services.AddSingleton<IListingMerger, ListingMerger>();
+
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();
         services.AddSingleton<IInstallFromUrlService, InstallFromUrlService>();
@@ -205,6 +214,11 @@ public static class ServiceRegistration
         // Shared catalog identity: the anchor every cross-user feature keys on.
         services.AddSingleton<ICatalogRepository, CatalogRepository>();
         services.AddSingleton<ICatalogService, CatalogService>();
+
+        // The discovery catalogue, which is a different thing entirely: what
+        // games exist, rather than which title an installed game is a copy of.
+        // The two aggregates share nothing but Game.ListingId.
+        services.AddSingleton<ICatalogListingRepository, CatalogListingRepository>();
     }
 
     /// <summary>
