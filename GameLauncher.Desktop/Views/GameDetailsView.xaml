@@ -264,6 +264,13 @@
                                        Style="{StaticResource CaptionTextStyle}"
                                        Text="{Binding Game.ExecutablePath}"
                                        TextWrapping="Wrap" />
+
+                            <Button Margin="0,10,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding ChangeExecutableCommand}"
+                                    Content="Change executable…"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    ToolTip="Point this entry at a different program without losing its playtime or notes." />
                         </StackPanel>
                     </Border>
 

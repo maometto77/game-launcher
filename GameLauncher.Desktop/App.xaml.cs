@@ -33,10 +33,15 @@ public partial class App : Application
 
         try
         {
-            var paths = new AppPaths();
-            paths.EnsureCreated();
-
             var options = StartupOptions.Parse(e.Args);
+
+            // Parsed before the paths are built, because --state-dir decides where
+            // every one of them points.
+            var paths = options.StateDirectory is { Length: > 0 } stateDirectory
+                ? new AppPaths(Path.GetFullPath(stateDirectory))
+                : new AppPaths();
+
+            paths.EnsureCreated();
 
             var builder = Host.CreateApplicationBuilder();
 

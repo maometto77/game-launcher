@@ -295,6 +295,61 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     private Task SaveNotesAsync() => PersistNotesAsync(CancellationToken.None);
 
     /// <summary>
+    /// Points this library entry at a different executable.
+    /// </summary>
+    /// <returns>A task that completes once the new path has been stored.</returns>
+    /// <remarks>
+    /// Repacks routinely ship several executables — the game, a configuration
+    /// tool, a launcher stub — and detection has to guess which is which. Without
+    /// this the only remedy for a wrong guess was to remove the game and add it
+    /// again, losing its playtime and notes along with the entry.
+    /// </remarks>
+    [RelayCommand]
+    private async Task ChangeExecutableAsync()
+    {
+        if (Game is null)
+        {
+            return;
+        }
+
+        // Opened where the game already lives, since the right executable is
+        // almost always a sibling of the wrong one.
+        var startIn = !string.IsNullOrWhiteSpace(Game.InstallDir) && Directory.Exists(Game.InstallDir)
+            ? Game.InstallDir
+            : Path.GetDirectoryName(Game.ExecutablePath);
+
+        var picked = _dialogs.PickFile("Select the executable to launch", "Programs|*.exe", startIn);
+
+        if (string.IsNullOrWhiteSpace(picked) ||
+            string.Equals(picked, Game.ExecutablePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        ClearError();
+
+        try
+        {
+            Game.ExecutablePath = picked;
+            await _library.UpdateAsync(Game).ConfigureAwait(true);
+
+            // Re-checked rather than assumed: the file was there a moment ago when
+            // the picker listed it, but the launch guard is what the Play button
+            // depends on.
+            IsExecutableMissing = !Game.ExecutableExists;
+
+            OnPropertyChanged(nameof(Game));
+            OnPropertyChanged(nameof(CanPlay));
+            PlayCommand.NotifyCanExecuteChanged();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Changing the executable for {Title} failed.", Game.Title);
+            SetErrorMessage($"The executable could not be changed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     /// Looks up cover and background artwork and applies it to this game.
     /// </summary>
     /// <returns>A task that completes when the lookup has finished.</returns>

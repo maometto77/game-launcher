@@ -60,6 +60,7 @@ public static class ServiceRegistration
     /// <param name="services">The container being built.</param>
     private static void AddInfrastructure(IServiceCollection services)
     {
+        services.AddSingleton<IStartupNotices, StartupNotices>();
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IUiDispatcher, UiDispatcher>();
         services.AddSingleton<IDialogService, DialogService>();

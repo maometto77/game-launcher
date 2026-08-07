@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GameLauncher.Desktop.Infrastructure;
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Models;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ namespace GameLauncher.Desktop.ViewModels;
 public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
 {
     private readonly INavigationService _navigation;
+    private readonly IStartupNotices _notices;
     private readonly ILogger<MainWindowViewModel> _logger;
     private bool _disposed;
 
@@ -33,15 +35,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     /// <param name="navigation">Navigation service driving the hosted page.</param>
     /// <param name="toasts">Achievement toast overlay, hosted above the current page.</param>
+    /// <param name="notices">Messages raised during startup, shown once a window exists.</param>
     /// <param name="logger">Logger for shell-level diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public MainWindowViewModel(
         INavigationService navigation,
         AchievementToastHostViewModel toasts,
+        IStartupNotices notices,
         ILogger<MainWindowViewModel> logger)
     {
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         Toasts = toasts ?? throw new ArgumentNullException(nameof(toasts));
+        _notices = notices ?? throw new ArgumentNullException(nameof(notices));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _navigation.CurrentChanged += OnNavigationCurrentChanged;
@@ -62,8 +67,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// </summary>
     /// <param name="cancellationToken">Cancels the initial load.</param>
     /// <returns>A task that completes when the landing page is loaded.</returns>
-    public Task InitializeAsync(CancellationToken cancellationToken = default) =>
-        NavigateAsync(NavigationSection.Home, cancellationToken);
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await NavigateAsync(NavigationSection.Home, cancellationToken).ConfigureAwait(true);
+
+        // Shown after the first page rather than before it, so the banner appears
+        // over a working window instead of an empty shell. Startup produces
+        // notices only for things the user genuinely needs to know — a database
+        // that had to be rebuilt, and nothing routine.
+        if (_notices.Messages is { Count: > 0 } messages)
+        {
+            SetErrorMessage(string.Join(" ", messages));
+            _notices.Clear();
+        }
+    }
 
     /// <summary>
     /// Navigates to a top-level section.

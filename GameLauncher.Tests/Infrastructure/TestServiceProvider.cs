@@ -37,12 +37,17 @@ public sealed class TestAppHost : IDisposable
     /// <param name="rootDirectory">
     /// Directory to use, or <see langword="null"/> for a fresh temporary one.
     /// </param>
+    /// <param name="migrate">
+    /// Whether to migrate the schema during construction. Pass
+    /// <see langword="false"/> to test startup itself — recovery from a damaged
+    /// database cannot be exercised by a host that has already failed to open it.
+    /// </param>
     /// <remarks>
     /// Reusing a directory is how a launcher restart is simulated: a second
     /// container over the same database, with none of the first one's in-memory
     /// state. Anything that survives is genuinely persisted.
     /// </remarks>
-    public TestAppHost(string? rootDirectory)
+    public TestAppHost(string? rootDirectory, bool migrate = true)
     {
         _ownsDirectory = rootDirectory is null;
 
@@ -62,6 +67,11 @@ public sealed class TestAppHost : IDisposable
         services.AddGameLauncher(paths, new StartupOptions());
 
         _provider = services.BuildServiceProvider();
+
+        if (!migrate)
+        {
+            return;
+        }
 
         // Migrated up front so anything resolved here can query real tables.
         // Run on the calling thread: the repositories await with
