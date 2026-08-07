@@ -1,6 +1,23 @@
 namespace GameLauncher.Desktop.Services.Discovery;
 
 /// <summary>
+/// How hard a source may be hit.
+/// </summary>
+/// <param name="MaxConcurrency">Requests that may be in flight at once.</param>
+/// <param name="MinimumInterval">Smallest gap between the start of two requests.</param>
+/// <remarks>
+/// Declared by the source because only the source knows what its site can take.
+/// A large content-delivery network with a documented API and a one-person
+/// hobby site are not the same kind of neighbour, and a single global setting
+/// would have to be tuned for the more fragile of the two.
+/// </remarks>
+public sealed record SourceThrottle(int MaxConcurrency, TimeSpan MinimumInterval)
+{
+    /// <summary>A conservative default for a source that has not said otherwise.</summary>
+    public static SourceThrottle Polite { get; } = new(1, TimeSpan.FromSeconds(1));
+}
+
+/// <summary>
 /// Narrows what an enumeration pass returns.
 /// </summary>
 public sealed record SourceEnumerationOptions
@@ -88,6 +105,9 @@ public interface ICatalogSource
     /// </para>
     /// </remarks>
     int Rank { get; }
+
+    /// <summary>How hard this source may be hit.</summary>
+    SourceThrottle Throttle { get; }
 
     /// <summary>
     /// Gets a value indicating whether the source can currently be used.

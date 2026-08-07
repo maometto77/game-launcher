@@ -5,6 +5,7 @@ using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
+using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Download;
@@ -169,6 +170,11 @@ public static class ServiceRegistration
         services.AddSingleton<IListingNormalizer, ListingNormalizer>();
         services.AddSingleton<IListingMatcher, ListingMatcher>();
         services.AddSingleton<IListingMerger, ListingMerger>();
+
+        // Sources are an open set dispatched by key, like achievement providers:
+        // adding one is a class and a line here. The import service throws at
+        // construction if two ever claim the same key.
+        services.AddSingleton<ICatalogImportService, CatalogImportService>();
 
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();

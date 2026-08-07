@@ -326,6 +326,8 @@ public sealed class MatchAndMergeTests
 
         public int Rank { get; } = rank;
 
+        public SourceThrottle Throttle => SourceThrottle.Polite;
+
         public bool IsAvailable => true;
 
         public IAsyncEnumerable<SourceListingRef> EnumerateAsync(
