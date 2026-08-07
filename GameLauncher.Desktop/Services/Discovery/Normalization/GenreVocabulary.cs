@@ -97,6 +97,40 @@ public static class GenreVocabulary
     }
 
     /// <summary>
+    /// Maps only values that are recognised genres, discarding anything else.
+    /// </summary>
+    /// <param name="values">Candidate values, typically free-form tags.</param>
+    /// <returns>Recognised genres, deduplicated, in the order first seen.</returns>
+    /// <remarks>
+    /// Used where the input is a general-purpose tag field rather than a genre
+    /// field. Most Internet Archive items carry no curated genre but do carry
+    /// subjects, some of which are genres and most of which are not — keeping
+    /// the unrecognised ones would fill the genre facet with "dosbox",
+    /// "emulation" and "msdos".
+    /// </remarks>
+    public static IReadOnlyList<string> MapKnown(IEnumerable<string>? values)
+    {
+        if (values is null)
+        {
+            return [];
+        }
+
+        var seen = new List<string>();
+
+        foreach (var part in values.SelectMany(value =>
+                     value?.Split(Separators, StringSplitOptions.RemoveEmptyEntries) ?? []))
+        {
+            if (Synonyms.TryGetValue(part.Trim(), out var canonical) &&
+                !seen.Contains(canonical, StringComparer.OrdinalIgnoreCase))
+            {
+                seen.Add(canonical);
+            }
+        }
+
+        return seen;
+    }
+
+    /// <summary>
     /// Maps several raw genre values at once.
     /// </summary>
     /// <param name="values">Raw values, each possibly a list.</param>

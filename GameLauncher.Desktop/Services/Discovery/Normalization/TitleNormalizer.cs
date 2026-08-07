@@ -29,6 +29,25 @@ public static partial class TitleNormalizer
     private static readonly string[] Articles = ["the", "a", "an"];
 
     /// <summary>
+    /// Words that describe how a copy runs rather than which game it is.
+    /// </summary>
+    /// <remarks>
+    /// A parenthesised group is dropped only when <em>every</em> word in it is
+    /// one of these. Internet Archive titles routinely carry
+    /// "(DOS) (Dosbox in Browser) (VGA,SB)", which says nothing about the game
+    /// and would otherwise make the same title unmatchable across sources.
+    /// Dropping parentheses wholesale would be wrong — "Command &amp; Conquer
+    /// (Red Alert)" is a different game from "Command &amp; Conquer".
+    /// </remarks>
+    private static readonly HashSet<string> TechnicalWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "dos", "msdos", "ms", "pc", "win", "win3", "win32", "win16", "windows", "dosbox",
+        "in", "browser", "emulated", "emulator", "vga", "svga", "ega", "cga", "sb",
+        "adlib", "soundblaster", "sound", "blaster", "midi", "mt32", "floppy", "disk",
+        "disc", "cd", "cdrom", "rom", "exe", "x86", "3dfx", "glide", "hdd"
+    };
+
+    /// <summary>
     /// Trailing markers that describe a packaging of the same game rather than a
     /// different game.
     /// </summary>
@@ -132,6 +151,7 @@ public static partial class TitleNormalizer
         working = StripDiacritics(working);
         working = TrailingYearPattern().Replace(working, " ");
         working = BracketedPattern().Replace(working, " ");
+        working = StripTechnicalParentheticals(working);
         working = VersionPattern().Replace(working, " ");
         working = PunctuationPattern().Replace(working, " ");
         working = CollapseWhitespace(working);
@@ -162,6 +182,31 @@ public static partial class TitleNormalizer
     /// <param name="title">The title as a source gave it.</param>
     /// <returns>The normalised title alone.</returns>
     public static string ComputeTitleKey(string title) => Normalize(title);
+
+    /// <summary>
+    /// Removes parenthesised groups that describe how a copy runs.
+    /// </summary>
+    /// <param name="value">A partly normalised title.</param>
+    /// <returns>The value without its technical annotations.</returns>
+    /// <remarks>
+    /// A group survives unless every word in it is technical, so a parenthesised
+    /// subtitle that happens to contain one such word is kept intact.
+    /// </remarks>
+    private static string StripTechnicalParentheticals(string value)
+    {
+        if (!value.Contains('(', StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        return ParentheticalPattern().Replace(value, match =>
+        {
+            var words = match.Groups[1].Value
+                .Split([' ', ',', '/', '+', '-', '.'], StringSplitOptions.RemoveEmptyEntries);
+
+            return words.Length > 0 && words.All(TechnicalWords.Contains) ? " " : match.Value;
+        });
+    }
 
     /// <summary>Removes accents so "Pokémon" and "Pokemon" compare equal.</summary>
     /// <param name="value">The value to fold.</param>
@@ -301,6 +346,11 @@ public static partial class TitleNormalizer
     /// <returns>The compiled pattern.</returns>
     [GeneratedRegex(@"\[[^\]]*\]", RegexOptions.CultureInvariant)]
     private static partial Regex BracketedPattern();
+
+    /// <summary>Matches a parenthesised group and captures its contents.</summary>
+    /// <returns>The compiled pattern.</returns>
+    [GeneratedRegex(@"\(([^()]*)\)", RegexOptions.CultureInvariant)]
+    private static partial Regex ParentheticalPattern();
 
     /// <summary>Matches version markers such as "v1.2" or "version 2".</summary>
     /// <returns>The compiled pattern.</returns>

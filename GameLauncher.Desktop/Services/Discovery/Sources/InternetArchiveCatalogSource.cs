@@ -267,7 +267,11 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
             Developer = metadata.GetString("mobygames_developed_by") ?? metadata.GetString("creator"),
             Publisher = metadata.GetString("mobygames_published_by") ?? metadata.GetString("publisher"),
 
-            Genres = GenreVocabulary.MapMany(metadata.GetStrings("mobygames_genre")),
+            // The curated field where it exists — most items have none, so the
+            // subject list is mined as a fallback, but strictly: an unrecognised
+            // subject is a tag, not a genre, and letting them through would fill
+            // the genre facet with "emulation" and "dosbox".
+            Genres = MapGenres(metadata),
             Platforms = BuildPlatforms(metadata),
             Tags = metadata.GetStrings("subject").Take(12).ToArray(),
             Images = BuildImages(metadata, identifier),
@@ -276,6 +280,25 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
             SourceUpdatedAt = metadata.LastUpdated,
             RawPayload = payload
         };
+    }
+
+    /// <summary>
+    /// Works out an item's genres.
+    /// </summary>
+    /// <param name="metadata">The parsed item.</param>
+    /// <returns>Canonical genres, or an empty list when none can be told.</returns>
+    /// <remarks>
+    /// Curated items carry <c>mobygames_genre</c>, which is a controlled
+    /// vocabulary and is taken as given. The great majority do not, so their
+    /// subject list is mined instead — but only for values already recognised as
+    /// genres, because a subject list is a general-purpose tag field and most of
+    /// what is in it is not a genre at all.
+    /// </remarks>
+    private static IReadOnlyList<string> MapGenres(InternetArchiveMetadata metadata)
+    {
+        var curated = GenreVocabulary.MapMany(metadata.GetStrings("mobygames_genre"));
+
+        return curated.Count > 0 ? curated : GenreVocabulary.MapKnown(metadata.GetStrings("subject"));
     }
 
     /// <summary>

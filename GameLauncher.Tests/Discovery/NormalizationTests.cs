@@ -71,6 +71,43 @@ public sealed class NormalizationTests
         Assert.NotEqual(TitleNormalizer.Normalize("Doom"), TitleNormalizer.Normalize(release));
     }
 
+    [Theory]
+    [InlineData("KAEON (DOS)")]
+    [InlineData("KAEON (DOS) (Dosbox in Browser)")]
+    [InlineData("KAEON (VGA,SB)")]
+    [InlineData("KAEON (MS-DOS) (CD)")]
+    public void Technical_annotations_do_not_prevent_a_match(string annotated)
+    {
+        // Real Internet Archive titles. These say how a copy runs, not which
+        // game it is, and leaving them in makes the same title unmatchable
+        // between sources.
+        Assert.Equal(TitleNormalizer.Normalize("KAEON"), TitleNormalizer.Normalize(annotated));
+    }
+
+    [Theory]
+    [InlineData("Command & Conquer (Red Alert)")]
+    [InlineData("Quest (The Lost Chapter)")]
+    [InlineData("Elite (Plus)")]
+    public void A_parenthesised_subtitle_is_part_of_the_name(string title)
+    {
+        // Dropping every parenthesis would merge a game with its expansion.
+        // A group survives unless every word in it is a technical annotation.
+        var stripped = title[..title.IndexOf('(')].Trim();
+
+        Assert.NotEqual(TitleNormalizer.Normalize(stripped), TitleNormalizer.Normalize(title));
+    }
+
+    [Fact]
+    public void Unrecognised_subjects_are_not_promoted_to_genres()
+    {
+        // Most Internet Archive items have no curated genre but do have
+        // subjects. Letting them all through would fill the genre facet with
+        // "emulation" and "dosbox".
+        Assert.Equal(
+            ["Action"],
+            GenreVocabulary.MapKnown(["emulation", "dosbox", "action", "msdos"]));
+    }
+
     [Fact]
     public void The_match_key_carries_the_year_so_a_remake_cannot_absorb_the_original()
     {
