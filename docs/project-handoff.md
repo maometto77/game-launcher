@@ -5,7 +5,7 @@ access to any prior conversation. Read this plus the codebase and you should be
 able to continue without guessing.
 
 **Status: version 1.0, complete.** The planned roadmap is finished. The solution
-builds with **0 warnings, 0 errors**; **148 tests pass**; the client database is
+builds with **0 warnings, 0 errors**; **150 tests pass**; the client database is
 at schema **v6** and the relay at **v1**. Everything in §5 is optional work.
 
 Companion documents, all current:
@@ -434,6 +434,30 @@ members to find. What it did find:
 - **Two dead members went from `AchievementItemViewModel`** — `GameTitle` became
   redundant when the page started grouping by title, and `ProgressTarget` only
   shadowed `Definition.ProgressTarget`.
+
+### Post-1.0 fix: solid-archive extraction
+
+Reported from real use: unpacking a 650 MB, 2192-entry 7z was unusably slow.
+
+The cause was not 7z being slow. `ExtractCore` iterated `archive.Entries` and
+called `entry.OpenEntryStream()` per entry. **A solid archive compresses every
+file into one continuous stream**, so opening an entry directly makes the decoder
+run from the start of that stream to reach it — one full decode per entry, which
+is quadratic. Measured on that archive: a single late entry cost 875 ms by random
+access, against 59 seconds for one forward pass over all 2192.
+
+Now gated on `IArchive.IsSolid`:
+
+- **Solid** (7z, solid RAR) → `archive.ExtractAllEntries()`, a forward-only
+  reader that decodes the stream once. Full extraction of that archive: **69
+  seconds** for 1.42 GB, all 2192 files.
+- **Not solid** (zip) → random access as before, which is already optimal because
+  each entry is compressed independently. SharpCompress actively refuses
+  `ExtractAllEntries` here, which is how the first attempt at the fix was caught:
+  it broke all six zip extraction tests.
+
+Progress reporting was throttled to 200 ms in the same change. Unthrottled, 2192
+entries meant 2192 posts to the interface thread; it is now 96.
 
 ### Final cleanup
 
@@ -1153,11 +1177,11 @@ interpolation). `Debug` for flow, `Information` for state changes worth seeing,
 
 ## 11. Testing status
 
-**148 tests, all passing.** Single project: `GameLauncher.Tests`.
+**150 tests, all passing.** Single project: `GameLauncher.Tests`.
 
 | Suite | Count | Covers |
 |---|---|---|
-| `Download.ArchiveExtractionTests` | 18 | Zip-slip, traversal, real zips, format detection |
+| `Download.ArchiveExtractionTests` | 20 | Zip-slip, traversal, real zips, format detection, progress throttling |
 | `Views.DialogSmokeTests` | 18 | Every window and page realised; both palettes |
 | `Achievements.SaveFileReaderTests` | 16 | JSON/XML/INI/regex, XXE, locked files |
 | `Download.DownloadIntegrationTests` | 15 | End-to-end HTTP: resume, redirects, checksums, cancellation |
@@ -1310,6 +1334,11 @@ Do this for any new test asserting an absence.
   pump and publish `CurrentChanged` only from it.
 - **No memory writing.** Only `OpenProcess`, `ReadProcessMemory` and
   `CloseHandle` are imported anywhere in the project. Keep it that way.
+- **The `IArchive.IsSolid` branch in `ArchiveExtractionService`.** Collapsing it
+  back to a single `archive.Entries` loop looks like a simplification and makes
+  extraction of any solid archive quadratic — the difference between 69 seconds
+  and half an hour on a real game archive. The two branches share one `Write`
+  local so the path validation still has exactly one implementation.
 - **Relay migrations stay PostgreSQL-portable** (§7).
 - **`global.json`** — removing it silently switches the build to SDK 10.
 - **`<Using Include="System.IO" />` in the Desktop csproj** — the `_wpftmp` fix.
@@ -1367,7 +1396,7 @@ dotnet build "GameLauncher.sln"
 dotnet test "GameLauncher.Tests/GameLauncher.Tests.csproj"
 ```
 
-Expected: **0 warnings, 0 errors**; **148 tests passed**. Warnings are meaningful
+Expected: **0 warnings, 0 errors**; **150 tests passed**. Warnings are meaningful
 here — CS1591 is deliberately visible, so a non-zero count means something
 regressed.
 

@@ -96,7 +96,7 @@ dotnet build "GameLauncher.sln"
 dotnet test "GameLauncher.Tests/GameLauncher.Tests.csproj"
 ```
 
-Expect **0 warnings, 0 errors** and **148 passing tests**. Warnings are
+Expect **0 warnings, 0 errors** and **150 passing tests**. Warnings are
 meaningful here: CS1591 (missing XML documentation) is deliberately left visible,
 so a non-zero warning count means something regressed.
 
