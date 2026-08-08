@@ -192,6 +192,19 @@ public sealed record AppSettings
     public IReadOnlyList<string> InternetArchiveCollections { get; init; } =
         ["softwarelibrary_msdos_games"];
 
+    /// <summary>
+    /// Whether MyAbandonware is imported alongside the Internet Archive.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="DiscoveryEnabled"/> and off by default. That
+    /// site's <c>robots.txt</c> disallows its download paths, so the source
+    /// contributes metadata only — worth having for titles, genres and
+    /// screenshots, but a different proposition from a source that supplies
+    /// installable files, and worth an explicit decision.
+    /// </remarks>
+    [JsonPropertyName("myAbandonwareEnabled")]
+    public bool MyAbandonwareEnabled { get; init; }
+
     /// <summary>Hours between background catalogue refreshes.</summary>
     [JsonPropertyName("discoveryRefreshHours")]
     public int DiscoveryRefreshHours { get; init; } = 24;

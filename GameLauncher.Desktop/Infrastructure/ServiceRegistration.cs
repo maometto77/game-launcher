@@ -6,6 +6,7 @@ using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Discovery;
+using GameLauncher.Desktop.Services.Discovery.Http;
 using GameLauncher.Desktop.Services.Discovery.Images;
 using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Discovery.Install;
@@ -184,6 +185,23 @@ public static class ServiceRegistration
         // adding one is a class and a line here. The import service throws at
         // construction if two ever claim the same key.
         services.AddSingleton<ICatalogSource, InternetArchiveCatalogSource>();
+        services.AddSingleton<ICatalogSource, MyAbandonwareCatalogSource>();
+
+        // Honouring robots.txt is what separates importing a catalogue from
+        // taking whatever a server will serve. Shared, and cached per host.
+        services.AddSingleton<IRobotsPolicy, RobotsPolicy>();
+
+        services.AddHttpClient(RobotsPolicy.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
+        services.AddHttpClient(MyAbandonwareCatalogSource.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
 
         services.AddSingleton<ICatalogImportService, CatalogImportService>();
 

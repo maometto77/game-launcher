@@ -165,6 +165,19 @@
                                   IsChecked="{Binding DiscoveryEnabled}"
                                   Style="{StaticResource CheckBoxStyle}" />
 
+                        <CheckBox Margin="0,8,0,0"
+                                  Content="Also import metadata from MyAbandonware"
+                                  IsChecked="{Binding MyAbandonwareEnabled}"
+                                  Style="{StaticResource CheckBoxStyle}"
+                                  ToolTip="That site's robots.txt disallows its download paths, so this adds titles, genres and screenshots only — never anything to download." />
+
+                        <TextBlock Margin="24,4,0,0"
+                                   MaxWidth="520"
+                                   HorizontalAlignment="Left"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Metadata only. That site does not permit automated access to its downloads, so games it alone describes are listed but cannot be installed."
+                                   TextWrapping="Wrap" />
+
                         <TextBlock Margin="0,14,0,0"
                                    Style="{StaticResource CaptionTextStyle}"
                                    Text="Internet Archive collections, one per line" />

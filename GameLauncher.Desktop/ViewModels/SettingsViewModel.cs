@@ -80,6 +80,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _internetArchiveCollections = string.Empty;
 
+    /// <summary>
+    /// Whether MyAbandonware is imported alongside the Internet Archive.
+    /// </summary>
+    /// <remarks>
+    /// Its own switch because it is its own decision: that site's robots.txt
+    /// disallows its download paths, so the source contributes metadata only.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _myAbandonwareEnabled;
+
     [ObservableProperty]
     private int _discoveryRefreshHours = 24;
 
@@ -123,6 +133,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SteamGridDbApiKey = current.SteamGridDbApiKey ?? string.Empty;
 
         DiscoveryEnabled = current.DiscoveryEnabled;
+        MyAbandonwareEnabled = current.MyAbandonwareEnabled;
         InternetArchiveCollections = string.Join(Environment.NewLine, current.InternetArchiveCollections);
         DiscoveryRefreshHours = current.DiscoveryRefreshHours;
         DiscoveryImageCacheMegabytes = current.DiscoveryImageCacheMegabytes;
@@ -223,6 +234,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 SteamGridDbApiKey = SteamGridDbApiKey.Trim() is { Length: > 0 } artworkKey ? artworkKey : null,
 
                 DiscoveryEnabled = DiscoveryEnabled,
+                MyAbandonwareEnabled = MyAbandonwareEnabled,
                 InternetArchiveCollections = ParseCollections(InternetArchiveCollections),
 
                 // Clamped rather than validated with a message: both are dials

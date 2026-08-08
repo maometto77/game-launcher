@@ -35,7 +35,11 @@ public static partial class CompanyNormalizer
             return null;
         }
 
-        var cleaned = WhitespacePattern().Replace(value, " ").Trim().TrimEnd(',', '.', ';');
+        // A trailing comma or semicolon is stray punctuation from a list; a
+        // trailing full stop is nearly always part of an abbreviation, and
+        // stripping it turns "Accolade, Inc." into something the source did not
+        // say. Only the former is removed.
+        var cleaned = WhitespacePattern().Replace(value, " ").Trim().TrimEnd(',', ';').Trim();
 
         return cleaned.Length == 0 ? null : cleaned;
     }
