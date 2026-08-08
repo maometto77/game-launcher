@@ -18,6 +18,7 @@ using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Launcher;
 using GameLauncher.Desktop.Services.Library;
 using GameLauncher.Desktop.Services.Notifications;
+using GameLauncher.Desktop.Services.Saves;
 using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Desktop.ViewModels;
 using GameLauncher.Desktop.Views;
@@ -233,6 +234,18 @@ public static class ServiceRegistration
         // Transports are an open set chosen by capability and availability. The
         // HttpClient one is always available and always last, so an external
         // engine that is not installed simply is not selected.
+        // Where a game keeps its saves, from the Ludusavi community manifest.
+        // A data dependency rather than hardcoded paths: the knowledge is large,
+        // changes constantly, and is already curated by people who care about it.
+        services.AddSingleton<ISavePathResolver, LudusaviSavePathResolver>();
+
+        services.AddHttpClient(LudusaviSavePathResolver.HttpClientName, client =>
+        {
+            // The manifest is tens of megabytes, so this is not a short request.
+            client.Timeout = TimeSpan.FromMinutes(3);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
         services.AddSingleton<IDownloadTransport, Aria2DownloadTransport>();
         services.AddSingleton<IDownloadTransport, HttpDownloadTransport>();
 
