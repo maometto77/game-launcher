@@ -25,14 +25,24 @@ public enum NavigationSection
     /// <summary>Library-wide achievement overview.</summary>
     Achievements = 4,
 
+    /// <summary>
+    /// The discovery catalogue: games that exist, as opposed to games installed.
+    /// </summary>
+    /// <remarks>
+    /// A section of its own rather than a mode of the library. The library
+    /// answers "what do I have"; this answers "what is out there". Conflating
+    /// them would make every filter and every count ambiguous.
+    /// </remarks>
+    Discover = 5,
+
     /// <summary>Application settings.</summary>
     /// <remarks>
     /// Numbered 6 rather than 5 because a <c>Search</c> member briefly sat
-    /// between them. Searching happens within the library page — over titles and
-    /// tags — rather than in a section of its own, so the member was removed once
-    /// it was clear nothing would map to it. The gap is left as it is because
-    /// renumbering an enum gains nothing and would silently change the meaning of
-    /// any value written down elsewhere.
+    /// between them and was removed — searching happens within a page rather than
+    /// in a section of its own. The gap it left has since been taken by
+    /// <see cref="Discover"/>. Settings keeps its value regardless: renumbering
+    /// an enum gains nothing and would silently change the meaning of any value
+    /// written down elsewhere.
     /// </remarks>
     Settings = 6
 }

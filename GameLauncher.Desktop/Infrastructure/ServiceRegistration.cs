@@ -6,7 +6,9 @@ using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Discovery;
+using GameLauncher.Desktop.Services.Discovery.Images;
 using GameLauncher.Desktop.Services.Discovery.Import;
+using GameLauncher.Desktop.Services.Discovery.Install;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sources;
@@ -185,6 +187,21 @@ public static class ServiceRegistration
 
         services.AddSingleton<ICatalogImportService, CatalogImportService>();
 
+        // A translator, not a second download stack: it picks an address and
+        // hands the existing install path a request it already understands.
+        services.AddSingleton<IListingInstallService, ListingInstallService>();
+
+        // Catalogue artwork is fetched when something displays it, never during
+        // an import: several thousand listings with half a dozen images each
+        // would be tens of thousands of transfers for pictures nobody looked at.
+        services.AddSingleton<IListingImageCache, ListingImageCache>();
+
+        services.AddHttpClient(ListingImageCache.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
         // A generous but finite timeout. Metadata responses are small; a search
         // page over a large collection is not, and the download client's infinite
         // timeout would be wrong here — a stalled catalogue request should give
@@ -270,6 +287,7 @@ public static class ServiceRegistration
         services.AddTransient<SettingsViewModel>();
         services.AddTransient<FriendsViewModel>();
         services.AddTransient<AchievementsViewModel>();
+        services.AddTransient<DiscoverViewModel>();
 
         // Dialog view models are transient: each opening starts from a blank form.
         services.AddTransient<AddGameViewModel>();

@@ -36,6 +36,15 @@ public interface IAppPaths
     /// <summary>Folder holding cached friend avatars.</summary>
     string AvatarDirectory { get; }
 
+    /// <summary>Folder holding cached artwork for discovery catalogue listings.</summary>
+    /// <remarks>
+    /// Kept apart from <see cref="ArtworkDirectory"/>, which holds artwork for
+    /// games the user actually has. This folder is a cache for a catalogue of
+    /// several thousand titles and is swept when it grows too large; the other
+    /// is not, because losing an installed game's cover would be data loss.
+    /// </remarks>
+    string ListingImageDirectory { get; }
+
     /// <summary>Folder holding rolling log files.</summary>
     string LogDirectory { get; }
 
@@ -116,6 +125,9 @@ public sealed class AppPaths : IAppPaths
     public string AvatarDirectory => Path.Combine(RootDirectory, "avatars");
 
     /// <inheritdoc />
+    public string ListingImageDirectory => Path.Combine(RootDirectory, "listings");
+
+    /// <inheritdoc />
     public string LogDirectory => Path.Combine(RootDirectory, "logs");
 
     /// <inheritdoc />
@@ -136,6 +148,7 @@ public sealed class AppPaths : IAppPaths
                      ArtworkDirectory,
                      AchievementIconDirectory,
                      AvatarDirectory,
+                     ListingImageDirectory,
                      LogDirectory,
                      DownloadDirectory,
                      DefaultInstallDirectory

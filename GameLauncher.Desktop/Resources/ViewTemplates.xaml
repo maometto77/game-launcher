@@ -39,4 +39,8 @@
         <views:AchievementsView />
     </DataTemplate>
 
+    <DataTemplate DataType="{x:Type viewModels:DiscoverViewModel}">
+        <views:DiscoverView />
+    </DataTemplate>
+
 </ResourceDictionary>

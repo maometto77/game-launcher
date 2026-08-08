@@ -267,6 +267,18 @@ public interface ICatalogListingRepository
         string localPath,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gets the cached image paths that must never be evicted.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the query.</param>
+    /// <returns>Absolute paths of artwork belonging to installed games.</returns>
+    /// <remarks>
+    /// Artwork for a listing the user has actually installed is shown on the
+    /// details page of something they own. Sweeping it away to reclaim space
+    /// would be a visible regression for a resource that is not scarce.
+    /// </remarks>
+    Task<IReadOnlyCollection<string>> GetPinnedImagePathsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>Starts an import run and returns its identifier.</summary>
     /// <param name="sourceKey">The source being imported.</param>
     /// <param name="mode">How much of it the pass covers.</param>

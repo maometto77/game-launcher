@@ -468,6 +468,32 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyCollection<string>> GetPinnedImagePathsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
+
+        var rows = await connection.QueryAsync<string>(
+            new CommandDefinition(
+                """
+                SELECT i.LocalPath
+                FROM   ListingImage i
+                JOIN   Game g ON g.ListingId = i.ListingId
+                WHERE  i.LocalPath IS NOT NULL
+
+                UNION
+
+                SELECT l.CoverImagePath
+                FROM   CatalogListing l
+                JOIN   Game g ON g.ListingId = l.ListingId
+                WHERE  l.CoverImagePath IS NOT NULL;
+                """,
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
+        return new HashSet<string>(rows, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <inheritdoc />
     public async Task<long> StartRunAsync(
         string sourceKey,
         ImportMode mode,

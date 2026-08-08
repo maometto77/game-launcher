@@ -197,6 +197,90 @@ public sealed class DialogSmokeTests
     }
 
     [Fact]
+    public async Task DiscoverPage_realises_with_listings_in_every_display_state()
+    {
+        using var host = new TestAppHost();
+
+        // Item templates only instantiate when their control has items, so a row
+        // of each state is seeded: installable, restricted, with and without a
+        // year, and one with no developer to attribute it to.
+        await host.Resolve<GameLauncher.Desktop.Services.Database.ICatalogListingRepository>().UpsertManyAsync(
+        [
+            DiscoverListing("lst_1", "Doom", 1993, downloadable: true, developer: "id Software"),
+            DiscoverListing("lst_2", "Oregon Trail", 1990, downloadable: false, developer: "MECC"),
+            DiscoverListing("lst_3", "Untitled", null, downloadable: true, developer: null)
+        ]);
+
+        var viewModel = host.Resolve<DiscoverViewModel>();
+
+        // Set before navigating so the first query already includes the
+        // restricted listing; its tile draws the disabled-install branch, which
+        // the default filter would hide.
+        viewModel.DownloadableOnly = false;
+
+        await viewModel.OnNavigatedToAsync();
+
+        Assert.Equal(3, viewModel.ListingsView.Count);
+        Assert.False(viewModel.IsCatalogEmpty);
+        Assert.Contains(viewModel.ListingsView, item => !item.IsDownloadable);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task DiscoverPage_hides_listings_that_cannot_be_installed_by_default()
+    {
+        using var host = new TestAppHost();
+
+        await host.Resolve<GameLauncher.Desktop.Services.Database.ICatalogListingRepository>().UpsertManyAsync(
+        [
+            DiscoverListing("lst_1", "Doom", 1993, downloadable: true, developer: "id Software"),
+            DiscoverListing("lst_2", "Oregon Trail", 1990, downloadable: false, developer: "MECC")
+        ]);
+
+        var viewModel = host.Resolve<DiscoverViewModel>();
+        await viewModel.OnNavigatedToAsync();
+
+        Assert.Single(viewModel.ListingsView);
+        Assert.Equal("Doom", viewModel.ListingsView[0].Title);
+    }
+
+    [Fact]
+    public async Task DiscoverPage_realises_its_empty_state()
+    {
+        using var host = new TestAppHost();
+
+        var viewModel = host.Resolve<DiscoverViewModel>();
+        await viewModel.OnNavigatedToAsync();
+
+        // A different branch of the markup from the tile list.
+        Assert.True(viewModel.IsCatalogEmpty);
+        Assert.False(viewModel.IsDiscoveryEnabled);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    private static GameLauncher.Desktop.Models.CatalogListing DiscoverListing(
+        string id,
+        string title,
+        int? year,
+        bool downloadable,
+        string? developer) =>
+        new()
+        {
+            ListingId = id,
+            Title = title,
+            SortTitle = title,
+            Year = year,
+            Developer = developer,
+            MatchKey = $"{title.ToLowerInvariant()}|{year ?? 0}",
+            PrimarySourceKey = "test",
+            ContentHash = id,
+            IsDownloadable = downloadable,
+            Genres = ["Action"]
+        };
+
+    [Fact]
     public async Task AchievementEditorWindow_realises_each_rule_panel()
     {
         using var host = new TestAppHost();
@@ -386,11 +470,22 @@ public sealed class DialogSmokeTests
                 var library = host.Resolve<LibraryViewModel>();
                 await library.LoadAsync();
 
+                // The discovery page is realised here too, with a row seeded so
+                // its item template actually instantiates. A key it uses that one
+                // palette omits would otherwise only throw the first time someone
+                // opened Discover on that theme.
+                await host.Resolve<GameLauncher.Desktop.Services.Database.ICatalogListingRepository>()
+                    .UpsertManyAsync([DiscoverListing("lst_p", "Doom", 1993, true, "id Software")]);
+
+                var discover = host.Resolve<DiscoverViewModel>();
+                await discover.OnNavigatedToAsync();
+
                 _wpf.Invoke(() =>
                 {
                     theme.Apply(candidate);
                     Realise(host.Resolve<MainWindow>());
                     RealisePage(library);
+                    RealisePage(discover);
                     Realise(host.Resolve<InstallFromUrlWindow>());
                 });
             }

@@ -73,6 +73,12 @@
                                  GroupName="Sections"
                                  IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Achievements}"
                                  Style="{StaticResource NavItemStyle}" />
+                    <RadioButton Command="{Binding NavigateCommand}"
+                                 CommandParameter="{x:Static models:NavigationSection.Discover}"
+                                 Content="Discover"
+                                 GroupName="Sections"
+                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Discover}"
+                                 Style="{StaticResource NavItemStyle}" />
                 </StackPanel>
 
                 <StackPanel Grid.Row="2">

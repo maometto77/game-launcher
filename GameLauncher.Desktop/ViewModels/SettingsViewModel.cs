@@ -58,6 +58,35 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private string _steamGridDbApiKey = string.Empty;
 
     /// <summary>
+    /// Whether the discovery catalogue refreshes itself.
+    /// </summary>
+    /// <remarks>
+    /// Off until switched on here. Discovery reaches a third-party service and
+    /// pulls down several thousand records; starting that unprompted would be
+    /// taking a decision that belongs to the person running the launcher.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _discoveryEnabled;
+
+    /// <summary>
+    /// Internet Archive collections to import, one per line.
+    /// </summary>
+    /// <remarks>
+    /// The whole scope of what gets imported.
+    /// <c>softwarelibrary_msdos_games</c> holds about 8 900 items; the parent
+    /// <c>softwarelibrary</c> holds over 230 000 and is far too broad to take
+    /// wholesale.
+    /// </remarks>
+    [ObservableProperty]
+    private string _internetArchiveCollections = string.Empty;
+
+    [ObservableProperty]
+    private int _discoveryRefreshHours = 24;
+
+    [ObservableProperty]
+    private int _discoveryImageCacheMegabytes = 500;
+
+    /// <summary>
     /// Initialises a new instance.
     /// </summary>
     /// <param name="settings">Settings persistence.</param>
@@ -92,6 +121,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
         FriendCode = current.EffectiveFriendCode;
         IsRegisteredWithRelay = current.IsRegistered;
         SteamGridDbApiKey = current.SteamGridDbApiKey ?? string.Empty;
+
+        DiscoveryEnabled = current.DiscoveryEnabled;
+        InternetArchiveCollections = string.Join(Environment.NewLine, current.InternetArchiveCollections);
+        DiscoveryRefreshHours = current.DiscoveryRefreshHours;
+        DiscoveryImageCacheMegabytes = current.DiscoveryImageCacheMegabytes;
 
         ThemeChangePending = false;
         StatusText = null;
@@ -186,7 +220,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 Theme = SelectedTheme,
                 RelayUrl = relay.Length == 0 ? null : relay,
                 DisplayName = name,
-                SteamGridDbApiKey = SteamGridDbApiKey.Trim() is { Length: > 0 } artworkKey ? artworkKey : null
+                SteamGridDbApiKey = SteamGridDbApiKey.Trim() is { Length: > 0 } artworkKey ? artworkKey : null,
+
+                DiscoveryEnabled = DiscoveryEnabled,
+                InternetArchiveCollections = ParseCollections(InternetArchiveCollections),
+
+                // Clamped rather than validated with a message: both are dials
+                // with no wrong answer, only unhelpful ones, and refusing to save
+                // over a typo in a number would be the more annoying behaviour.
+                DiscoveryRefreshHours = Math.Clamp(DiscoveryRefreshHours, 1, 24 * 30),
+                DiscoveryImageCacheMegabytes = Math.Clamp(DiscoveryImageCacheMegabytes, 16, 10_000)
             }).ConfigureAwait(true);
 
             ThemeChangePending = SelectedTheme != previous.Theme;
@@ -205,4 +248,28 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <returns>A task that completes when the fields have been reset.</returns>
     [RelayCommand]
     private Task RevertAsync() => OnNavigatedToAsync();
+
+    /// <summary>
+    /// Splits the collections box into identifiers.
+    /// </summary>
+    /// <param name="text">One identifier per line, as typed.</param>
+    /// <returns>Trimmed, deduplicated identifiers.</returns>
+    /// <remarks>
+    /// Commas are accepted as well as line breaks, because a list of identifiers
+    /// is exactly the kind of thing people paste in one line.
+    /// </remarks>
+    private static IReadOnlyList<string> ParseCollections(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        return text
+            .Split(['\r', '\n', ','], StringSplitOptions.RemoveEmptyEntries)
+            .Select(entry => entry.Trim())
+            .Where(entry => entry.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
 }
