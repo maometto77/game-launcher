@@ -31,19 +31,6 @@ configured, and nothing in the launcher blocks on the network.
 - **Friends** — friend codes, requests and presence over SignalR, with a local
   cache so the page still works with the relay down.
 
-### Deliberately out of scope
-
-- No scraping, parsing or bespoke integration for any specific game
-  repack/crack/warez distribution site. You supply a URL that already points at
-  a file.
-- No torrent or magnet link handling.
-- **No memory writing, process modification or DLL injection.** Memory
-  achievements are read-only inspection: only `OpenProcess`,
-  `ReadProcessMemory` and `CloseHandle` are imported anywhere in the project, and
-  the process handle is opened without write rights.
-
----
-
 ## Layout
 
 ```
