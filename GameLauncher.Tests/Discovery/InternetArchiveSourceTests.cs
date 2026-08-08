@@ -263,14 +263,123 @@ public sealed class InternetArchiveSourceTests
     }
 
     [Fact]
-    public async Task A_source_with_no_collections_configured_reports_itself_unavailable()
+    public async Task An_item_whose_title_is_an_array_does_not_discard_the_whole_page()
+    {
+        // Found running against a real uploader's items: the search index returns
+        // title as an array whenever an item carries more than one. Typed as a
+        // plain string it throws, and because a page is deserialised in one pass
+        // that single item silently discarded all hundred results beside it.
+        var stub = new PagingStub(
+        [
+            """
+            {"items":[
+              {"identifier":"a","title":"Plain Title"},
+              {"identifier":"b","title":["First Title","Second Title"]},
+              {"identifier":"c","title":null},
+              {"identifier":"d"}
+            ],"cursor":"","total":4}
+            """
+        ]);
+
+        var references = new List<SourceListingRef>();
+
+        await foreach (var reference in Source(stub, out _).EnumerateAsync(new SourceEnumerationOptions()))
+        {
+            references.Add(reference);
+        }
+
+        Assert.Equal(4, references.Count);
+        Assert.Equal("Plain Title", references[0].Title);
+
+        // The first entry is what the Archive means by the primary value.
+        Assert.Equal("First Title", references[1].Title);
+
+        // A missing title falls back to the identifier rather than being dropped.
+        Assert.Equal("c", references[2].Title);
+        Assert.Equal("d", references[3].Title);
+    }
+
+    [Fact]
+    public async Task An_uploader_can_be_imported_alongside_the_collections()
     {
         var settings = new FixedSettings();
 
         await settings.SaveAsync(settings.Current with
         {
             DiscoveryEnabled = true,
-            InternetArchiveCollections = []
+            InternetArchiveCollections = ["softwarelibrary_msdos_games"],
+            InternetArchiveUploader = "someone@example.test"
+        });
+
+        var stub = new PagingStub(["""{"items":[],"cursor":"","total":0}"""]);
+
+        var source = new InternetArchiveCatalogSource(
+            stub, settings, NullLogger<InternetArchiveCatalogSource>.Instance);
+
+        await foreach (var _ in source.EnumerateAsync(new SourceEnumerationOptions()))
+        {
+            // Draining the enumeration is what issues the request.
+        }
+
+        var request = Uri.UnescapeDataString(stub.Requests[0]);
+
+        // Combined, not replaced: one pass can cover a curated library and one
+        // person's uploads. The uploader field holds an email address, not a
+        // screen name — a screen name matches nothing.
+        Assert.Contains("collection:\"softwarelibrary_msdos_games\"", request);
+        Assert.Contains("uploader:\"someone@example.test\"", request);
+        Assert.Contains(" OR ", request);
+        Assert.Contains("mediatype:software", request);
+    }
+
+    [Fact]
+    public async Task An_uploader_alone_is_enough_to_make_the_source_available()
+    {
+        var settings = new FixedSettings();
+
+        await settings.SaveAsync(settings.Current with
+        {
+            DiscoveryEnabled = true,
+            InternetArchiveCollections = [],
+            InternetArchiveUploader = "someone@example.test"
+        });
+
+        var source = new InternetArchiveCatalogSource(
+            new StubHttpClientFactory(), settings, NullLogger<InternetArchiveCatalogSource>.Instance);
+
+        Assert.True(source.IsAvailable);
+    }
+
+    [Fact]
+    public async Task A_blank_uploader_is_treated_as_absent()
+    {
+        var settings = new FixedSettings();
+
+        await settings.SaveAsync(settings.Current with
+        {
+            DiscoveryEnabled = true,
+            InternetArchiveCollections = [],
+            InternetArchiveUploader = "   "
+        });
+
+        var source = new InternetArchiveCatalogSource(
+            new StubHttpClientFactory(), settings, NullLogger<InternetArchiveCatalogSource>.Instance);
+
+        // Whitespace in a settings box must not produce uploader:"" — a fielded
+        // query the scrape API rejects outright with a 400.
+        Assert.False(source.IsAvailable);
+    }
+
+    [Fact]
+    public async Task A_source_with_no_collections_or_uploader_reports_itself_unavailable()
+    {
+        var settings = new FixedSettings();
+
+        await settings.SaveAsync(settings.Current with
+        {
+            DiscoveryEnabled = true,
+            InternetArchiveCollections = [],
+            InternetArchiveUploader = null
         });
 
         var source = new InternetArchiveCatalogSource(

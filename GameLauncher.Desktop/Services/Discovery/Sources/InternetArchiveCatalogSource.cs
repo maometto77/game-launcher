@@ -129,10 +129,17 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
     /// launcher that began doing that on first run, without being asked, would
     /// be taking a decision that belongs to the person running it.
     /// </remarks>
-    public bool IsAvailable => _settings.Current.DiscoveryEnabled && Collections.Count > 0;
+    public bool IsAvailable =>
+        _settings.Current.DiscoveryEnabled && (Collections.Count > 0 || Uploader is not null);
 
     /// <summary>Gets the collections configured for import.</summary>
     private IReadOnlyList<string> Collections => _settings.Current.InternetArchiveCollections;
+
+    /// <summary>Gets the uploader configured for import, or <see langword="null"/>.</summary>
+    private string? Uploader =>
+        _settings.Current.InternetArchiveUploader is { } value && !string.IsNullOrWhiteSpace(value)
+            ? value.Trim()
+            : null;
 
     /// <inheritdoc />
     public async IAsyncEnumerable<SourceListingRef> EnumerateAsync(
@@ -463,12 +470,19 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
     /// </remarks>
     private string? BuildQuery(DateTimeOffset? changedSince)
     {
-        var collections = Collections
+        var terms = Collections
             .Where(collection => !string.IsNullOrWhiteSpace(collection))
-            .Select(collection => collection.Trim())
-            .ToArray();
+            .Select(collection => $"collection:\"{collection.Trim()}\"")
+            .ToList();
 
-        if (collections.Length == 0)
+        // Combined with the collections rather than replacing them, so one pass
+        // can cover curated libraries and a particular person's uploads.
+        if (Uploader is { } uploader)
+        {
+            terms.Add($"uploader:\"{uploader}\"");
+        }
+
+        if (terms.Count == 0)
         {
             return null;
         }
@@ -476,7 +490,7 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
         var builder = new StringBuilder();
 
         builder.Append('(')
-            .AppendJoin(" OR ", collections.Select(collection => $"collection:\"{collection}\""))
+            .AppendJoin(" OR ", terms)
             .Append(')')
             .Append(" AND mediatype:software");
 
@@ -562,6 +576,14 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
         public string? Identifier { get; set; }
 
         /// <summary>The item's title.</summary>
+        /// <remarks>
+        /// Read through <see cref="FlexibleStringConverter"/> because the search
+        /// index returns this as an array whenever an item carries more than one
+        /// title. Typed as a plain string it throws, and because the page is
+        /// deserialised in one pass a single such item discards every result
+        /// alongside it.
+        /// </remarks>
+        [System.Text.Json.Serialization.JsonConverter(typeof(FlexibleStringConverter))]
         public string? Title { get; set; }
 
         /// <summary>When the Archive last changed the item, in Unix seconds.</summary>

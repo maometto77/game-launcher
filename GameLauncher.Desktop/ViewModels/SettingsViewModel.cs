@@ -90,6 +90,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _myAbandonwareEnabled;
 
+    /// <summary>
+    /// An Internet Archive uploader to import, as an email address.
+    /// </summary>
+    /// <remarks>
+    /// The search index stores uploaders as email addresses, so a screen name
+    /// matches nothing. Combined with the collections rather than replacing them.
+    /// </remarks>
+    [ObservableProperty]
+    private string _internetArchiveUploader = string.Empty;
+
     [ObservableProperty]
     private int _discoveryRefreshHours = 24;
 
@@ -135,6 +145,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         DiscoveryEnabled = current.DiscoveryEnabled;
         MyAbandonwareEnabled = current.MyAbandonwareEnabled;
         InternetArchiveCollections = string.Join(Environment.NewLine, current.InternetArchiveCollections);
+        InternetArchiveUploader = current.InternetArchiveUploader ?? string.Empty;
         DiscoveryRefreshHours = current.DiscoveryRefreshHours;
         DiscoveryImageCacheMegabytes = current.DiscoveryImageCacheMegabytes;
 
@@ -236,6 +247,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 DiscoveryEnabled = DiscoveryEnabled,
                 MyAbandonwareEnabled = MyAbandonwareEnabled,
                 InternetArchiveCollections = ParseCollections(InternetArchiveCollections),
+
+                InternetArchiveUploader = InternetArchiveUploader.Trim() is { Length: > 0 } uploader
+                    ? uploader
+                    : null,
+
 
                 // Clamped rather than validated with a message: both are dials
                 // with no wrong answer, only unhelpful ones, and refusing to save

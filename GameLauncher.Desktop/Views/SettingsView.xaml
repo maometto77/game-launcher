@@ -192,6 +192,17 @@
                                  Text="{Binding InternetArchiveCollections, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Leave blank to import nothing. softwarelibrary_msdos_games holds about 8,900 games." />
 
+                        <TextBlock Margin="0,14,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Also import one uploader's items (email address)" />
+
+                        <TextBox Margin="0,6,0,0"
+                                 Width="420"
+                                 HorizontalAlignment="Left"
+                                 FontFamily="{StaticResource MonoFontFamily}"
+                                 Text="{Binding InternetArchiveUploader, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="The Archive indexes uploaders by email address, so a screen name will not match. Added to the collections above rather than replacing them." />
+
                         <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="Refresh every (hours)" />

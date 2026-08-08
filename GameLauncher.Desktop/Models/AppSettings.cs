@@ -205,6 +205,26 @@ public sealed record AppSettings
     [JsonPropertyName("myAbandonwareEnabled")]
     public bool MyAbandonwareEnabled { get; init; }
 
+    /// <summary>
+    /// An Internet Archive uploader whose items should be imported, or
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The search index stores an uploader as an email address, which is what
+    /// this must be — a screen name will not match. It is combined with
+    /// <see cref="InternetArchiveCollections"/> rather than replacing it, so an
+    /// import can cover curated collections and one person's uploads at once.
+    /// </para>
+    /// <para>
+    /// An uploader's items are whatever that person chose to upload. Unlike a
+    /// curated collection, nothing about them is vouched for by the Archive, so
+    /// this is left empty by default and is an explicit choice.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("internetArchiveUploader")]
+    public string? InternetArchiveUploader { get; init; }
+
     /// <summary>Hours between background catalogue refreshes.</summary>
     [JsonPropertyName("discoveryRefreshHours")]
     public int DiscoveryRefreshHours { get; init; } = 24;
