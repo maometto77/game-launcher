@@ -107,6 +107,23 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private int _discoveryImageCacheMegabytes = 500;
 
     /// <summary>
+    /// Whether downloads use <c>aria2c</c> when it is available.
+    /// </summary>
+    /// <remarks>
+    /// Off by default: letting the launcher start an external process is worth
+    /// deciding explicitly. It also enables torrent and magnet downloads, which
+    /// nothing else here can move.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _aria2Enabled;
+
+    [ObservableProperty]
+    private string _aria2ExecutablePath = string.Empty;
+
+    [ObservableProperty]
+    private int _aria2Connections = 4;
+
+    /// <summary>
     /// Initialises a new instance.
     /// </summary>
     /// <param name="settings">Settings persistence.</param>
@@ -148,6 +165,10 @@ public sealed partial class SettingsViewModel : ViewModelBase
         InternetArchiveUploader = current.InternetArchiveUploader ?? string.Empty;
         DiscoveryRefreshHours = current.DiscoveryRefreshHours;
         DiscoveryImageCacheMegabytes = current.DiscoveryImageCacheMegabytes;
+
+        Aria2Enabled = current.Aria2Enabled;
+        Aria2ExecutablePath = current.Aria2ExecutablePath ?? string.Empty;
+        Aria2Connections = current.Aria2Connections;
 
         ThemeChangePending = false;
         StatusText = null;
@@ -257,7 +278,16 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 // with no wrong answer, only unhelpful ones, and refusing to save
                 // over a typo in a number would be the more annoying behaviour.
                 DiscoveryRefreshHours = Math.Clamp(DiscoveryRefreshHours, 1, 24 * 30),
-                DiscoveryImageCacheMegabytes = Math.Clamp(DiscoveryImageCacheMegabytes, 16, 10_000)
+                DiscoveryImageCacheMegabytes = Math.Clamp(DiscoveryImageCacheMegabytes, 16, 10_000),
+
+                Aria2Enabled = Aria2Enabled,
+                Aria2ExecutablePath = Aria2ExecutablePath.Trim() is { Length: > 0 } aria2
+                    ? aria2
+                    : null,
+
+                // Bounded because the Archive asks clients not to open more than
+                // a handful of connections to one server.
+                Aria2Connections = Math.Clamp(Aria2Connections, 1, 16)
             }).ConfigureAwait(true);
 
             ThemeChangePending = SelectedTheme != previous.Theme;

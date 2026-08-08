@@ -1,6 +1,7 @@
 using System.Net.Http;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Database;
+using GameLauncher.Desktop.Services.Discovery.Sourcing;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Library;
 using Microsoft.Extensions.Logging;
@@ -16,6 +17,7 @@ public sealed class ListingInstallService : IListingInstallService
     private readonly IInstallFromUrlService _install;
     private readonly IGameImportService _import;
     private readonly IGameRepository _games;
+    private readonly IDownloadSourceResolver _sourcing;
     private readonly ILogger<ListingInstallService> _logger;
 
     /// <summary>
@@ -25,6 +27,7 @@ public sealed class ListingInstallService : IListingInstallService
     /// <param name="install">The existing download, verify and unpack path.</param>
     /// <param name="import">Adds the result to the library.</param>
     /// <param name="games">Records the link back to the listing.</param>
+    /// <param name="sourcing">Finds a download when the listing carries none.</param>
     /// <param name="logger">Logger for install diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public ListingInstallService(
@@ -32,12 +35,14 @@ public sealed class ListingInstallService : IListingInstallService
         IInstallFromUrlService install,
         IGameImportService import,
         IGameRepository games,
+        IDownloadSourceResolver sourcing,
         ILogger<ListingInstallService> logger)
     {
         _listings = listings ?? throw new ArgumentNullException(nameof(listings));
         _install = install ?? throw new ArgumentNullException(nameof(install));
         _import = import ?? throw new ArgumentNullException(nameof(import));
         _games = games ?? throw new ArgumentNullException(nameof(games));
+        _sourcing = sourcing ?? throw new ArgumentNullException(nameof(sourcing));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -46,7 +51,32 @@ public sealed class ListingInstallService : IListingInstallService
     {
         ArgumentNullException.ThrowIfNull(listing);
 
-        return listing.Downloads
+        return ToMirrors(listing.Downloads);
+    }
+
+    /// <summary>
+    /// Explains why a listing cannot be installed.
+    /// </summary>
+    /// <param name="listing">The listing that produced no address.</param>
+    /// <returns>A sentence naming the actual reason.</returns>
+    /// <remarks>
+    /// Being restricted and simply having no address are different situations
+    /// and a person can act on the difference — the first will never work, the
+    /// second may once another source describes the game.
+    /// </remarks>
+    private static string DescribeUnavailable(CatalogListing listing) =>
+        listing.IsDownloadable
+            ? $"'{listing.Title}' is listed but no source offers a download for it."
+            : $"'{listing.Title}' is listed but its source does not allow downloading it.";
+
+    /// <summary>
+    /// Turns download rows into the addresses an install will try, in order.
+    /// </summary>
+    /// <param name="downloads">The rows to convert.</param>
+    /// <returns>Mirrors, best first.</returns>
+    private static IReadOnlyList<ListingMirror> ToMirrors(IReadOnlyList<ListingDownload> downloads)
+    {
+        return downloads
             .Where(download => download.Kind is DownloadKind.Game or DownloadKind.Torrent)
             .Where(download => Uri.TryCreate(download.Url, UriKind.Absolute, out var parsed) &&
                                parsed.Scheme is "http" or "https" or "magnet")
@@ -75,19 +105,31 @@ public sealed class ListingInstallService : IListingInstallService
         var listing = await _listings.GetAsync(listingId, cancellationToken).ConfigureAwait(false)
                       ?? throw new InvalidOperationException($"No catalogue listing '{listingId}' exists.");
 
-        if (!listing.IsDownloadable)
-        {
-            // Not a failure to retry. The source has said this item may be looked
-            // at but not taken away, and every attempt would return a 403.
-            return new ListingInstallResult(
-                null, listing, 0, $"'{listing.Title}' is listed but its source does not allow downloading it.");
-        }
-
-        var mirrors = GetMirrors(listing);
+        // A restricted listing's own addresses are not used even when it has
+        // them: the source has said the item may be looked at but not taken
+        // away, and every attempt would return a 403. Another source may still
+        // hold the same game, so this falls through to resolution rather than
+        // failing outright.
+        var mirrors = listing.IsDownloadable ? GetMirrors(listing) : [];
 
         if (mirrors.Count == 0)
         {
-            return new ListingInstallResult(null, listing, 0, $"'{listing.Title}' has no download address.");
+            var payload = await _sourcing.ResolveAsync(listing, cancellationToken).ConfigureAwait(false);
+
+            if (!payload.HasDownloads)
+            {
+                return new ListingInstallResult(
+                    null,
+                    listing,
+                    0,
+                    payload.Explanation ?? DescribeUnavailable(listing));
+            }
+
+            _logger.LogInformation(
+                "Resolved {Count} download address(es) for '{Title}' from another source.",
+                payload.Downloads.Count, listing.Title);
+
+            mirrors = ToMirrors(payload.Downloads);
         }
 
         var tried = 0;

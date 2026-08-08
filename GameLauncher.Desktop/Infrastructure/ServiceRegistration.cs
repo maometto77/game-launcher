@@ -12,6 +12,7 @@ using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Discovery.Install;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
+using GameLauncher.Desktop.Services.Discovery.Sourcing;
 using GameLauncher.Desktop.Services.Discovery.Sources;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Friends;
@@ -208,6 +209,12 @@ public static class ServiceRegistration
 
         // A translator, not a second download stack: it picks an address and
         // hands the existing install path a request it already understands.
+        // Sourcing adapters answer "given this page, what can be downloaded" —
+        // a different question from "what games exist", with different failure
+        // modes, which is why they are a separate open set from ICatalogSource.
+        services.AddSingleton<ISourcingAdapter, MyAbandonwareSourcingAdapter>();
+        services.AddSingleton<IDownloadSourceResolver, DownloadSourceResolver>();
+
         services.AddSingleton<IListingInstallService, ListingInstallService>();
 
         // Catalogue artwork is fetched when something displays it, never during
