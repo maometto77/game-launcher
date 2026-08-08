@@ -212,6 +212,27 @@ public sealed class DownloadQueueTests
     }
 
     [Fact]
+    public async Task A_report_arriving_after_a_failure_does_not_resurrect_the_job()
+    {
+        // Progress<T> raises its callback asynchronously, so a report genuinely
+        // can land after the job it describes has stopped. Applying it would put
+        // a failed job back into Downloading, where nothing moves it out again.
+        using var fixture = new QueueFixture();
+
+        fixture.Install.FailFor.Add("lst_1");
+
+        var job = fixture.Queue.Enqueue("lst_1", "Doom");
+
+        Assert.True(await WaitAsync(() => job.Phase == DownloadPhase.Failed));
+
+        fixture.Install.ReportTransfer("lst_1", received: 100, total: 200, rate: 1000);
+
+        await Task.Delay(100);
+
+        Assert.Equal(DownloadPhase.Failed, job.Phase);
+    }
+
+    [Fact]
     public async Task A_report_arriving_after_a_pause_does_not_restart_the_job()
     {
         using var fixture = new QueueFixture();

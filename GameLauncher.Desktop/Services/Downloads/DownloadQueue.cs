@@ -524,8 +524,11 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
     /// <param name="update">What the install path said.</param>
     private static void Apply(DownloadJob job, InstallProgress update)
     {
-        // A report arriving after a pause must not resurrect the job's phase.
-        if (job.Phase is DownloadPhase.Paused or DownloadPhase.Cancelled)
+        // Progress<T> raises its callback asynchronously, so a report can arrive
+        // after the job it describes has already stopped — and setting the phase
+        // from it would put a failed or cancelled job back into Downloading,
+        // where nothing would ever move it out again.
+        if (job.Phase is DownloadPhase.Paused or DownloadPhase.ReadyToInstall || job.IsTerminal)
         {
             return;
         }
