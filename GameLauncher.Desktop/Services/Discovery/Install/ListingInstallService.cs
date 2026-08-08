@@ -47,10 +47,15 @@ public sealed class ListingInstallService : IListingInstallService
         ArgumentNullException.ThrowIfNull(listing);
 
         return listing.Downloads
-            .Where(download => download.Kind == DownloadKind.Game)
+            .Where(download => download.Kind is DownloadKind.Game or DownloadKind.Torrent)
             .Where(download => Uri.TryCreate(download.Url, UriKind.Absolute, out var parsed) &&
-                               parsed.Scheme is "http" or "https")
-            .OrderBy(download => download.MirrorRank)
+                               parsed.Scheme is "http" or "https" or "magnet")
+
+            // Torrents last, whatever their recorded rank. They need an external
+            // engine that may not be installed, so a direct address is always
+            // tried first and the torrent is a bonus rather than a dependency.
+            .OrderBy(download => download.Kind == DownloadKind.Torrent ? 1 : 0)
+            .ThenBy(download => download.MirrorRank)
             .Select(download => new ListingMirror(
                 new Uri(download.Url),
                 download.FileName,

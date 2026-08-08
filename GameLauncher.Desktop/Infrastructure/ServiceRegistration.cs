@@ -230,6 +230,12 @@ public static class ServiceRegistration
             client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
         });
 
+        // Transports are an open set chosen by capability and availability. The
+        // HttpClient one is always available and always last, so an external
+        // engine that is not installed simply is not selected.
+        services.AddSingleton<IDownloadTransport, Aria2DownloadTransport>();
+        services.AddSingleton<IDownloadTransport, HttpDownloadTransport>();
+
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();
         services.AddSingleton<IInstallFromUrlService, InstallFromUrlService>();

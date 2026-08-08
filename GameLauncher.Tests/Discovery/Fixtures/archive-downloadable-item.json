@@ -34,9 +34,16 @@
       "source": "original",
       "format": "Metadata",
       "md5": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    {
+      "name": "msdos_Doom_1993_archive.torrent",
+      "source": "original",
+      "size": "3421",
+      "format": "Archive BitTorrent",
+      "md5": "ffffffffffffffffffffffffffffffff"
     }
   ],
-  "files_count": 4,
+  "files_count": 5,
   "item_last_updated": 1700000000,
   "item_size": 2419451,
   "metadata": {

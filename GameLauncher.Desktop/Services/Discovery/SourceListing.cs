@@ -27,7 +27,17 @@ public enum DownloadKind
     Manual = 1,
 
     /// <summary>Anything else worth offering — patches, soundtracks, extras.</summary>
-    Extra = 2
+    Extra = 2,
+
+    /// <summary>
+    /// A BitTorrent payload delivering the game.
+    /// </summary>
+    /// <remarks>
+    /// Kept apart from <see cref="Game"/> because it needs a transport that may
+    /// not be installed. An install offers it only after the direct addresses,
+    /// so a launcher without aria2c never reaches for it.
+    /// </remarks>
+    Torrent = 3
 }
 
 /// <summary>

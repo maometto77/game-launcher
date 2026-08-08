@@ -63,16 +63,53 @@ public sealed class InternetArchiveSourceTests
 
         var listing = await source.FetchAsync(Reference("msdos_Doom_1993"));
 
-        var urls = listing!.Downloads.Select(download => download.Url.AbsoluteUri).ToArray();
+        var files = listing!.Downloads
+            .Where(download => download.Kind == DownloadKind.Game)
+            .Select(download => download.Url.AbsoluteUri)
+            .ToArray();
 
-        Assert.Equal(3, urls.Length);
+        Assert.Equal(3, files.Length);
 
         // Rank 0 re-resolves to a working server on every request, so it cannot
         // go stale the way a recorded host can.
-        Assert.StartsWith("https://archive.org/download/", urls[0]);
-        Assert.Contains("ia601403.us.archive.org", urls[1]);
-        Assert.Contains("ia801403.us.archive.org", urls[2]);
-        Assert.All(urls, url => Assert.EndsWith("Doom_1993.zip", url));
+        Assert.StartsWith("https://archive.org/download/", files[0]);
+        Assert.Contains("ia601403.us.archive.org", files[1]);
+        Assert.Contains("ia801403.us.archive.org", files[2]);
+        Assert.All(files, url => Assert.EndsWith("Doom_1993.zip", url));
+    }
+
+    [Fact]
+    public async Task The_items_own_torrent_is_offered_after_the_direct_addresses()
+    {
+        // The Archive generates a torrent for most items and asks that large
+        // transfers use it, because peers carry the load instead of its servers.
+        var (source, _) = Build().Json("/metadata/", Fixture("archive-downloadable-item.json"));
+
+        var listing = await source.FetchAsync(Reference("msdos_Doom_1993"));
+
+        var torrent = listing!.Downloads.Single(download => download.Kind == DownloadKind.Torrent);
+
+        Assert.EndsWith("msdos_Doom_1993_archive.torrent", torrent.Url.AbsoluteUri);
+
+        // Last, because it needs an engine that may not be installed. A direct
+        // address always works and must be what an install reaches for first.
+        Assert.Same(torrent, listing.Downloads[^1]);
+
+        // Its size is the size of the .torrent file, not of what it delivers, so
+        // reporting it as the download size would be misleading.
+        Assert.Null(torrent.SizeBytes);
+    }
+
+    [Fact]
+    public async Task An_item_that_opts_out_of_torrents_is_respected()
+    {
+        // noarchivetorrent is the Archive saying this item has none. The
+        // restricted fixture carries the flag.
+        var (source, _) = Build().Json("/metadata/", Fixture("archive-restricted-item.json"));
+
+        var listing = await source.FetchAsync(Reference("msdos_Oregon_Trail_The_1990"));
+
+        Assert.DoesNotContain(listing!.Downloads, download => download.Kind == DownloadKind.Torrent);
     }
 
     [Fact]

@@ -225,6 +225,36 @@ public sealed record AppSettings
     [JsonPropertyName("internetArchiveUploader")]
     public string? InternetArchiveUploader { get; init; }
 
+    /// <summary>
+    /// Whether downloads should use <c>aria2c</c> when it is available.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. Turning it on lets the launcher start an external process,
+    /// which is a decision worth making explicitly rather than inheriting because
+    /// a binary happens to be on the path. With it off — or with aria2c missing —
+    /// the built-in HttpClient engine handles every download exactly as before.
+    /// </remarks>
+    [JsonPropertyName("aria2Enabled")]
+    public bool Aria2Enabled { get; init; }
+
+    /// <summary>
+    /// Full path to <c>aria2c</c>, or <see langword="null"/> to find it on the
+    /// system path.
+    /// </summary>
+    [JsonPropertyName("aria2ExecutablePath")]
+    public string? Aria2ExecutablePath { get; init; }
+
+    /// <summary>
+    /// How many connections aria2 opens per download.
+    /// </summary>
+    /// <remarks>
+    /// The reason to use aria2 at all: one stream is limited by per-connection
+    /// shaping, and several are not. Clamped when applied — the Archive asks
+    /// clients not to open more than a handful.
+    /// </remarks>
+    [JsonPropertyName("aria2Connections")]
+    public int Aria2Connections { get; init; } = 4;
+
     /// <summary>Hours between background catalogue refreshes.</summary>
     [JsonPropertyName("discoveryRefreshHours")]
     public int DiscoveryRefreshHours { get; init; } = 24;

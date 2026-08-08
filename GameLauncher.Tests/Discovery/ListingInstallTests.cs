@@ -156,7 +156,7 @@ public sealed class ListingInstallTests
     }
 
     [Fact]
-    public async Task Mirrors_are_offered_in_rank_order_and_non_http_addresses_are_ignored()
+    public async Task Mirrors_are_offered_in_rank_order_with_torrents_last()
     {
         using var host = new TestAppHost();
 
@@ -167,8 +167,18 @@ public sealed class ListingInstallTests
             new ListingDownload { ListingId = "lst_1", Url = "https://b.test/second.zip", MirrorRank = 5 },
             new ListingDownload { ListingId = "lst_1", Url = "https://a.test/first.zip", MirrorRank = 1 },
 
-            // Not a transfer this launcher performs, and deliberately never has.
-            new ListingDownload { ListingId = "lst_1", Url = "magnet:?xt=urn:btih:abc", MirrorRank = 0 }
+            // Ranked first by the source, but a torrent needs an engine that may
+            // not be installed, so a direct address is always tried before it.
+            new ListingDownload
+            {
+                ListingId = "lst_1",
+                Url = "magnet:?xt=urn:btih:abc",
+                Kind = DownloadKind.Torrent,
+                MirrorRank = 0
+            },
+
+            // Not a transfer this launcher performs, at any rank.
+            new ListingDownload { ListingId = "lst_1", Url = "ftp://c.test/third.zip", MirrorRank = 2 }
         ];
 
         await host.Resolve<ICatalogListingRepository>().UpsertManyAsync([listing]);
@@ -176,9 +186,10 @@ public sealed class ListingInstallTests
         var stored = await host.Resolve<ICatalogListingRepository>().GetAsync("lst_1");
         var mirrors = host.Resolve<IListingInstallService>().GetMirrors(stored!);
 
-        Assert.Equal(2, mirrors.Count);
+        Assert.Equal(3, mirrors.Count);
         Assert.Equal("https://a.test/first.zip", mirrors[0].Url.AbsoluteUri);
         Assert.Equal("https://b.test/second.zip", mirrors[1].Url.AbsoluteUri);
+        Assert.StartsWith("magnet:", mirrors[2].Url.AbsoluteUri);
     }
 
     [Fact]

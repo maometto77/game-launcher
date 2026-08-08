@@ -370,7 +370,65 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
             }
         }
 
+        AppendTorrent(metadata, identifier, downloads);
+
         return downloads;
+    }
+
+    /// <summary>
+    /// Adds the item's own <c>.torrent</c>, when the Archive publishes one.
+    /// </summary>
+    /// <param name="metadata">The parsed item.</param>
+    /// <param name="identifier">The item identifier.</param>
+    /// <param name="downloads">The list being built.</param>
+    /// <remarks>
+    /// <para>
+    /// The Archive generates a torrent for most items and asks that large
+    /// transfers use it, because peers carry the load instead of its own
+    /// servers. For a multi-gigabyte preservation archive that is both faster
+    /// for the person downloading and kinder to the host.
+    /// </para>
+    /// <para>
+    /// Ranked last on purpose. It only works when aria2c is installed and
+    /// enabled, so it must never be the mirror an install reaches for first —
+    /// the HTTP addresses above always work.
+    /// </para>
+    /// </remarks>
+    private static void AppendTorrent(
+        InternetArchiveMetadata metadata,
+        string identifier,
+        List<ListingDownloadRef> downloads)
+    {
+        // Some items opt out, and the flag is the Archive saying so.
+        if (downloads.Count == 0 ||
+            string.Equals(metadata.GetString("noarchivetorrent"), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var torrent = metadata.Files.FirstOrDefault(file =>
+            file.Name.EndsWith("_archive.torrent", StringComparison.OrdinalIgnoreCase));
+
+        if (torrent is null)
+        {
+            return;
+        }
+
+        downloads.Add(new ListingDownloadRef
+        {
+            Url = new Uri(
+                $"{DownloadEndpoint}/{Uri.EscapeDataString(identifier)}/{Uri.EscapeDataString(torrent.Name)}"),
+            FileName = torrent.Name,
+
+            // The size of the .torrent file itself, not of what it delivers, so
+            // it is deliberately not reported as the download size.
+            SizeBytes = null,
+            Md5 = null,
+            Sha1 = null,
+            Format = "Torrent",
+            Kind = DownloadKind.Torrent,
+            MirrorRank = downloads.Count
+        });
     }
 
     /// <summary>
