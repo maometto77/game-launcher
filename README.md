@@ -30,13 +30,23 @@ configured, and nothing in the launcher blocks on the network.
   turn rather than on top of one another.
 - **Friends** — friend codes, requests and presence over SignalR, with a local
   cache so the page still works with the relay down.
+- **Discover** — an optional catalogue of games that exist, imported from the
+  Internet Archive's software libraries and, if you switch it on, described
+  further by MyAbandonware. Full-text search, genre and platform filters, and
+  one-click install through the same download path as everything else, with the
+  checksum the source published. **Off by default:** nothing is fetched from any
+  source until you turn it on in Settings.
 
 ### Deliberately out of scope
 
-- No scraping, parsing or bespoke integration for any specific game
-  repack/crack/warez distribution site. You supply a URL that already points at
-  a file.
+- No scraping, parsing or bespoke integration for any game repack, crack or
+  warez distribution site. The two supported sources are an archive with a
+  documented public API and a metadata site whose own `robots.txt` is honoured;
+  everywhere else, you supply a URL that already points at a file.
 - No torrent or magnet link handling.
+- **Nothing is imported from a path a site's `robots.txt` disallows.**
+  MyAbandonware disallows its download paths, so that source contributes titles,
+  genres and screenshots only — never anything to download.
 - **No memory writing, process modification or DLL injection.** Memory
   achievements are read-only inspection: only `OpenProcess`,
   `ReadProcessMemory` and `CloseHandle` are imported anywhere in the project, and
@@ -180,6 +190,7 @@ For anything beyond your own machine, see **[docs/deployment.md](docs/deployment
 |---|---|
 | [docs/project-handoff.md](docs/project-handoff.md) | The full picture: architecture, schema, decisions and their reasoning, conventions, testing, open questions. **Start here to work on the code.** |
 | [docs/catalog-identity.md](docs/catalog-identity.md) | Shared catalog identity, merging duplicates, moving between relays |
+| [docs/catalog-import-design.md](docs/catalog-import-design.md) | The discovery catalogue: sources, matching, merging, and what running it against the live APIs changed |
 | [docs/relay-architecture.md](docs/relay-architecture.md) | Authentication, sync conflict resolution, portability |
 | [docs/deployment.md](docs/deployment.md) | Hosting the relay: reverse proxy, tunnels, LAN vs internet, backups |
 

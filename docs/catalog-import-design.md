@@ -1,6 +1,9 @@
 # Catalog Import — Architecture and Implementation Plan
 
-**Status: proposal. No code written, no schema changed.**
+**Status: built.** Schema **v7** is applied, both sources are implemented, and
+the suite is at **343 tests, 0 warnings**. §14 records where the built system
+differs from the plan below and why — read it before trusting any earlier
+section that contradicts it.
 
 This document designs automatic population of a browsable game catalog from
 external sources, starting with the Internet Archive and MyAbandonware.
@@ -1139,3 +1142,88 @@ which the design is proven or not, at the lowest cost.
 5. **Should imported listings be relay-synced?** **No**, explicitly. The relay's
    conflict rules require every synced field to be monotonic or single-writer
    (§8 of the handoff); merged multi-source metadata is neither.
+
+---
+
+## 14. As built — deviations from this plan, and why
+
+Everything above is the plan. This section is the record of what changed while
+building it, and it takes precedence.
+
+### 14.1 Found by running against the live API, not by fixtures
+
+| Finding | Consequence |
+|---|---|
+| **The Internet Archive stamps every metadata response with a `created` timestamp** regenerated per request | The content hash covered the raw payload, so every unchanged item looked changed and the incremental path never engaged. The payload is provenance, not content, and is now excluded from the hash |
+| **Registering a source made it available by default** | A fresh install would have begun crawling a third-party service unprompted, and every pipeline test enumerated 8 898 live items — the suite went from 10 s to hanging. Availability now requires the user to switch discovery on |
+| **A failed run satisfied the refresh interval** | One transient outage during a nightly refresh silently cost a day of updates, and looked identical to success. A run that recorded an error is due again |
+| **Most Archive items carry no `mobygames_genre`** | Genre facets were empty. Subjects are now mined as a fallback, but strictly — an unrecognised subject is a tag, not a genre |
+| **Archive titles carry `(DOS) (Dosbox in Browser) (VGA,SB)`** | The same title was unmatchable between sources. A parenthesised group is dropped from the match key when every word in it is a technical annotation — never wholesale, because `Command & Conquer (Red Alert)` is a different game |
+
+### 14.2 Found by tests
+
+- **The health check ran only between batches**, so a source holding fewer items
+  than one batch was never judged and a wholly broken parser reported a clean
+  run. It now also runs after the final partial batch.
+- **Ambiguous matches counted against the parse rate.** A remake the matcher
+  declines to place says nothing about whether the parser works, and a catalogue
+  full of them would have aborted a healthy pass. Fetch failures and placement
+  failures are now counted separately.
+- **`CompanyNormalizer.Clean` stripped a trailing full stop**, turning
+  `Accolade, Inc.` into something no source had said. Only stray commas and
+  semicolons are removed.
+
+### 14.3 Deliberate departures from the plan
+
+| Plan | Built | Reason |
+|---|---|---|
+| FTS5 **external-content** table | A **standard** FTS5 table, written by the repository inside the listing's transaction | External content requires the content table to carry the indexed columns, which would have meant denormalised `Developer`/`Publisher`/`Genres` columns on `CatalogListing` — the opposite of the normalisation this schema exists to get right. The repository is the only write path, so there is exactly one caller to keep honest |
+| Triggers keep the index in sync | The repository does, in the same transaction | A trigger would have had to aggregate across three join tables. Harder to reason about, impossible to test in isolation, and no safer given a single writer |
+| `LIKE` fallback if FTS5 is unavailable | No fallback | `Microsoft.Data.Sqlite` bundles SQLite with FTS5 enabled, so availability is a build-time fact rather than a runtime variable. A fallback path that cannot occur is a path that cannot be tested |
+| `Game.ListingId` in a later migration | In v7 | Nothing had shipped v7 yet, so a second migration would have been ceremony |
+| MyAbandonware supplies download mirrors | **Metadata only** | Its `robots.txt` disallows `/download/*` for every crawler. See §14.4 |
+| Enumerate MyAbandonware by browsing | By its **sitemap** | Advertised in the site's own `robots.txt`: one compressed file instead of hundreds of page fetches, and the gentler thing to do |
+| Selector map in overridable JSON | **Typed extractors in code** | Reversed at the user's direction during review, and the live site vindicated it: the page publishes `schema.org/VideoGame` JSON-LD carrying every field this source contributes, which is a far more stable anchor than any CSS selector |
+
+### 14.4 The MyAbandonware constraint
+
+Checking `robots.txt` before writing the source turned out to decide its shape.
+The published rules disallow, for every crawler:
+
+```
+/download/*   /manual/*   /search/*
+/game/rate/*  /game/comment/*  /game/playcomment/*
+/game/vote/*  /game/playstat/*  /favorites/*
+```
+
+`/game/{slug}` and `/browse/*` are permitted, and a sitemap is advertised.
+
+**So the source imports metadata and never collects a download address.** A game
+only MyAbandonware describes is listed and not installable; a game it shares with
+the Internet Archive is installable through the Archive and better described
+because of MyAbandonware. That is the multi-source merge earning its keep.
+
+`IRobotsPolicy` enforces this at runtime rather than by convention, and the test
+fixture contains a `/download/` link precisely so the suite fails if the parser
+ever starts following one.
+
+### 14.5 Known limitations
+
+1. **The memory-cost of `ImportMode.Remerge` grows with the catalogue.** It walks
+   every listing; at 8 898 items that is seconds, and it has not been measured at
+   ten times that.
+2. **`FieldProvenance` is written; `MergeTrace` is computed but only logged.** The
+   trace is not persisted — turning on `CaptureMergeTrace` writes it to the log
+   rather than a table. Persisting it is a schema change nobody has needed yet.
+3. **No end-to-end run against MyAbandonware.** The parser is tested against a
+   page captured from the live site, and the robots policy against the site's
+   real rules, but no full import has been performed. The Internet Archive path
+   has been run end to end against the live API.
+4. **Screenshots are stored but not displayed.** The Discover tile shows a cover;
+   the details page does not yet show the screenshot set.
+5. **`ListingAlias` has no user interface.** The table and repository methods
+   exist and are tested, so a manual "these are the same game" decision is
+   expressible in data but not yet from the page.
+6. **The ambiguous-match queue is a log line.** When the matcher declines to place
+   an observation it is counted and logged; there is no view listing them for
+   review.

@@ -4,9 +4,16 @@
 access to any prior conversation. Read this plus the codebase and you should be
 able to continue without guessing.
 
-**Status: version 1.0, complete.** The planned roadmap is finished. The solution
-builds with **0 warnings, 0 errors**; **150 tests pass**; the client database is
-at schema **v6** and the relay at **v1**. Everything in §5 is optional work.
+**Status: version 1.0 complete, plus the discovery catalogue.** The solution
+builds with **0 warnings, 0 errors**; **343 tests pass**; the client database is
+at schema **v7** and the relay at **v1**.
+
+> **Schema v7 and the `Discover` section are newer than most of this document.**
+> The discovery catalogue is a separate subsystem from `CatalogEntry` — that
+> type remains exactly what §6 describes, the identity of an *installed* title.
+> A "listing" is a game the launcher knows exists and mostly has not got.
+> [`docs/catalog-import-design.md`](catalog-import-design.md) is authoritative
+> for it, and its §14 records what changed during implementation.
 
 Companion documents, all current:
 
@@ -14,6 +21,7 @@ Companion documents, all current:
 - [`docs/deployment.md`](deployment.md) — hosting the relay: proxies, tunnels, backups, security
 - [`docs/catalog-identity.md`](catalog-identity.md) — catalog identity, merging, relay migration
 - [`docs/relay-architecture.md`](relay-architecture.md) — auth, sync, conflict resolution, portability
+- [`docs/catalog-import-design.md`](catalog-import-design.md) — the discovery catalogue: sources, matching, merging, schema v7
 
 **To just build and run it, skip to [Appendix A](#appendix-a--build-run-and-operate).**
 
