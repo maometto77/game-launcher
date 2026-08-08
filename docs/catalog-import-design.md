@@ -1227,3 +1227,129 @@ ever starts following one.
 6. **The ambiguous-match queue is a log line.** When the matcher declines to place
    an observation it is counted and logged; there is no view listing them for
    review.
+
+---
+
+## 15. Downloads, saves and sourcing — the second round
+
+Four capabilities added after the catalogue itself. Three are new subsystems;
+one is a refusal.
+
+### 15.1 Pluggable download transports
+
+`IDownloadService` now owns the *rules* and delegates the *transfer*.
+
+```
+DownloadService            validate → name → [transport] → checksum → rename
+   ├── Aria2DownloadTransport    priority 0, Http|Torrent, opt-in
+   └── HttpDownloadTransport     priority 100, Http, always available
+```
+
+Validating the address, resolving a file name, verifying the checksum and
+renaming into place stay in one implementation. A second engine cannot get any
+of them subtly wrong, and a third would not have to reimplement them.
+
+The extraction was done as a pure move: all 26 existing download tests passed
+unmodified through it, which is the evidence that behaviour did not change.
+
+**aria2 is opt-in.** Letting a launcher start an external process is worth
+deciding explicitly rather than inheriting because a binary is on the path.
+Missing or disabled, it reports itself unavailable and the built-in engine runs.
+
+**Driven by CLI, not the RPC daemon.** RPC reports richer progress but means
+owning a background process, a port and a secret for a launcher that downloads a
+file occasionally. Progress is read from the size of the file on disk, so it
+cannot be broken by a change to aria2's console format and correctness never
+depends on parsing it.
+
+**Magnet is accepted only now that something can move it**, and only for an
+address already classified as a torrent. `file://` and `ftp://` are still
+refused — a downloader that accepts `file://` turns a pasted string into an
+arbitrary local file copy.
+
+### 15.2 Archive.org torrents
+
+Items now also offer their own `{identifier}_archive.torrent`. The Archive
+generates one for most items and asks that large transfers use it, because peers
+carry the load instead of its servers.
+
+Ranked **last**, whatever the source said. It needs an engine that may not be
+installed, so a direct address is always what an install reaches for first and
+the torrent is a bonus rather than a dependency. Items flagged
+`noarchivetorrent` are respected.
+
+### 15.3 Ludusavi save-path resolution
+
+`ISavePathResolver` answers "where does this game keep its saves" from the
+Ludusavi community manifest — a data dependency, not hardcoded paths, because
+the knowledge is large, changes constantly, and is already curated.
+
+| Decision | Reasoning |
+|---|---|
+| Minimal deserialisation types, unmatched properties ignored | The parser walks past `launch` and `installDir` without building objects. Measured: 16 MB indexes in **~4 s**, ~20 MB resident |
+| Loaded lazily on first lookup | Nothing about a 16 MB download and parse belongs on the startup path |
+| Config-only and wrong-platform entries dropped while indexing | What survives is what a save feature wants, and it is a fraction of the file |
+| `Expand` returns **null** rather than a half-expanded path | A literal `<base>/saves` is a directory nobody has; acting on it means searching nonsense |
+| Steam id preferred over title | It identifies a game exactly; a title has to be matched and can be matched wrongly |
+
+Validated against the real published manifest: Stardew Valley, Terraria,
+Half-Life and Doom resolve to correct absolute paths, and `steam:220` resolves to
+Half-Life 2 by id alone.
+
+**There is no save-sync relay pipeline to integrate into** — cloud saves remain
+deferred (§5 of the handoff). The resolver is built as the standalone service
+that pipeline will need, and wired into the integration point that does exist:
+the achievement editor's save-file picker now opens at the game's known save
+directory.
+
+### 15.4 Sourcing adapters, and one deliberate refusal
+
+`ISourcingAdapter` answers "given this page, what can be downloaded" — a
+different question from `ICatalogSource`'s "what games exist", with different
+failure modes. Hence a separate open set rather than more methods on the
+existing one.
+
+**`MyAbandonwareSourcingAdapter` refuses, and that is its whole job.** The site
+disallows `/download/*` for every crawler, so there is no download it can
+honestly produce. It is written as a real adapter rather than left as a gap so
+the decision is stated once, checked against the live rules rather than assumed,
+and covered by a test that fails if the behaviour ever changes — a missing
+adapter would be indistinguishable from an oversight.
+
+**`DownloadSourceResolver` does the useful part.** When a listing carries no
+address of its own it asks the adapters, and failing that looks for the same game
+described elsewhere in the catalogue. A game MyAbandonware describes and the
+Archive also holds is installable through the Archive and better described
+because of MyAbandonware. It follows the importer's own ±1 year rule, so *Prince
+of Persia* 1989 never borrows a download from the 2008 remake.
+
+### 15.5 Explicitly not implemented
+
+The original request also asked for browser-header impersonation, extraction of
+direct links from crawler-blocked paths, and handling of Cloudflare/Turnstile
+challenges. Those are not built, and the code is arranged so their absence is
+visible rather than accidental:
+
+- `IRobotsPolicy` is consulted before every request, not once at startup.
+- The MyAbandonware parser's test fixture contains a `/download/` link
+  specifically so the suite fails if extraction is ever added there.
+- The adapter distinguishes `DisallowedByRobots` from `Unreachable`, so a
+  permanent refusal is never retried as though it were a transient failure.
+
+The capability that request wanted — installing a game discovered through a
+metadata-only source — is delivered by §15.4 instead.
+
+### 15.6 Known limitations of this round
+
+1. **aria2 has not been exercised against a real download.** Availability
+   detection, argument construction and the fallback are covered by tests; no
+   file has been fetched through it, because the binary is not installed here.
+2. **Torrent progress is coarse.** Reported from the growing file for HTTP; a
+   multi-file torrent reports only on completion.
+3. **Registry save locations are reported, not read.** A caller is told the key
+   exists so it can decide; nothing here exports it.
+4. **`SavePathQuery.SteamAppId` is never populated by the launcher** — it has no
+   Steam integration. The parameter exists for a caller that does.
+5. **The Ludusavi manifest download is slow** (~3 minutes on a domestic
+   connection for 16 MB). It is cached for a fortnight and fetched lazily, so
+   this is a one-off background cost rather than a recurring one.
