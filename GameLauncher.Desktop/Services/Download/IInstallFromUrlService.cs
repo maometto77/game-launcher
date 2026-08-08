@@ -29,7 +29,21 @@ public enum InstallPhase
 /// <param name="Phase">The stage in progress.</param>
 /// <param name="Fraction">Completion within this stage, or <see langword="null"/> when unknown.</param>
 /// <param name="Message">A line of text describing what is happening.</param>
-public sealed record InstallProgress(InstallPhase Phase, double? Fraction, string Message);
+/// <param name="Transfer">
+/// The underlying transfer's detail during
+/// <see cref="InstallPhase.Downloading"/>, and <see langword="null"/> otherwise.
+/// </param>
+/// <remarks>
+/// <paramref name="Transfer"/> is carried through rather than reduced to a
+/// fraction because a download manager needs the byte counts and the rate to
+/// show a speed and an estimate, and neither can be recovered from a percentage.
+/// Optional, so every existing caller is unaffected.
+/// </remarks>
+public sealed record InstallProgress(
+    InstallPhase Phase,
+    double? Fraction,
+    string Message,
+    DownloadProgress? Transfer = null);
 
 /// <summary>
 /// Describes a game to install from a direct download link.

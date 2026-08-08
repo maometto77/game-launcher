@@ -155,6 +155,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
                     await _navigation.NavigateToAsync<DiscoverViewModel>(cancellationToken).ConfigureAwait(true);
                     break;
 
+                case NavigationSection.Downloads:
+                    await _navigation.NavigateToAsync<DownloadsViewModel>(cancellationToken).ConfigureAwait(true);
+                    break;
+
                 case NavigationSection.Settings:
                     await _navigation.NavigateToAsync<SettingsViewModel>(cancellationToken).ConfigureAwait(true);
                     break;

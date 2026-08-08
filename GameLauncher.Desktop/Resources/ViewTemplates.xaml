@@ -43,4 +43,8 @@
         <views:DiscoverView />
     </DataTemplate>
 
+    <DataTemplate DataType="{x:Type viewModels:DownloadsViewModel}">
+        <views:DownloadsView />
+    </DataTemplate>
+
 </ResourceDictionary>

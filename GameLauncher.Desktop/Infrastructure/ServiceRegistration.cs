@@ -15,6 +15,7 @@ using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sourcing;
 using GameLauncher.Desktop.Services.Discovery.Sources;
 using GameLauncher.Desktop.Services.Download;
+using GameLauncher.Desktop.Services.Downloads;
 using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Launcher;
 using GameLauncher.Desktop.Services.Library;
@@ -217,6 +218,10 @@ public static class ServiceRegistration
 
         services.AddSingleton<IListingInstallService, ListingInstallService>();
 
+        // The queue is a singleton because it *is* the state: the list of
+        // downloads and which are running outlives any page that shows them.
+        services.AddSingleton<IDownloadQueue, DownloadQueue>();
+
         // Catalogue artwork is fetched when something displays it, never during
         // an import: several thousand listings with half a dozen images each
         // would be tens of thousands of transfers for pictures nobody looked at.
@@ -332,6 +337,7 @@ public static class ServiceRegistration
         services.AddTransient<FriendsViewModel>();
         services.AddTransient<AchievementsViewModel>();
         services.AddTransient<DiscoverViewModel>();
+        services.AddTransient<DownloadsViewModel>();
 
         // Dialog view models are transient: each opening starts from a blank form.
         services.AddTransient<AddGameViewModel>();

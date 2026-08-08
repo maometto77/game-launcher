@@ -246,6 +246,52 @@ public sealed class DialogSmokeTests
     }
 
     [Fact]
+    public async Task DownloadsPage_realises_a_row_in_every_control_state()
+    {
+        using var host = new TestAppHost();
+
+        // A row of each state, so every branch of the row template instantiates:
+        // one running with controls, one paused, one failed with a retry, and one
+        // finished and waiting to be installed.
+        var queue = host.Resolve<GameLauncher.Desktop.Services.Downloads.IDownloadQueue>();
+
+        foreach (var index in Enumerable.Range(1, 4))
+        {
+            queue.Enqueue($"lst_{index}", $"Game {index}");
+        }
+
+        var jobs = queue.Jobs;
+
+        queue.Pause(jobs[1].JobId);
+        queue.Cancel(jobs[2].JobId);
+
+        jobs[3].Phase = GameLauncher.Desktop.Models.DownloadPhase.ReadyToInstall;
+
+        var viewModel = host.Resolve<DownloadsViewModel>();
+        await viewModel.OnNavigatedToAsync();
+
+        Assert.Equal(4, viewModel.Items.Count);
+        Assert.False(viewModel.IsEmpty);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+
+        await viewModel.OnNavigatedFromAsync();
+    }
+
+    [Fact]
+    public async Task DownloadsPage_realises_its_empty_state()
+    {
+        using var host = new TestAppHost();
+
+        var viewModel = host.Resolve<DownloadsViewModel>();
+        await viewModel.OnNavigatedToAsync();
+
+        Assert.True(viewModel.IsEmpty);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
     public async Task DiscoverPage_realises_its_empty_state()
     {
         using var host = new TestAppHost();

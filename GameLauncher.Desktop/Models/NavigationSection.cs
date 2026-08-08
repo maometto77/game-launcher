@@ -35,6 +35,16 @@ public enum NavigationSection
     /// </remarks>
     Discover = 5,
 
+    /// <summary>
+    /// The download queue.
+    /// </summary>
+    /// <remarks>
+    /// A section rather than a panel on the Discover page: downloads outlive the
+    /// page that started them, and burying a running transfer inside a catalogue
+    /// browser makes it hard to find precisely when someone wants to check on it.
+    /// </remarks>
+    Downloads = 7,
+
     /// <summary>Application settings.</summary>
     /// <remarks>
     /// Numbered 6 rather than 5 because a <c>Search</c> member briefly sat

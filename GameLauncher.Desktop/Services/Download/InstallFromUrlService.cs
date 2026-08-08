@@ -55,7 +55,8 @@ public sealed class InstallFromUrlService : IInstallFromUrlService
             progress?.Report(new InstallProgress(
                 InstallPhase.Downloading,
                 update.Fraction,
-                DescribeTransfer(update))));
+                DescribeTransfer(update),
+                update)));
 
         var download = await _downloads.DownloadAsync(
             new DownloadRequest
