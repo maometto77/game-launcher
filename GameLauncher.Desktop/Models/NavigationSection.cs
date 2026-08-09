@@ -1,58 +1,59 @@
 namespace GameLauncher.Desktop.Models;
 
 /// <summary>
-/// The top-level sections reachable from the sidebar.
+/// A top-level destination in the sidebar.
 /// </summary>
 /// <remarks>
-/// Used to drive sidebar selection independently of the concrete view model on
-/// screen. A game details page is reached from Library and should keep Library
-/// highlighted, which a "selected view model type" approach could not express.
+/// <para>
+/// Five sections, each answering a different question: what do I have, what
+/// exists, what is transferring, who am I playing with, and how is this
+/// configured. Pages that answer the same question live inside one section as
+/// sub-navigation rather than competing for a sidebar slot — a sidebar that
+/// grows a row per page stops being navigation and becomes a list.
+/// </para>
+/// <para>
+/// Renumbered when the eight original entries were consolidated. Nothing
+/// persists these values — they exist only for the lifetime of a window — so
+/// unlike a schema enum there is no stored data to invalidate.
+/// </para>
 /// </remarks>
 public enum NavigationSection
 {
-    /// <summary>Landing page: recently played, resume, and library highlights.</summary>
-    Home = 0,
-
-    /// <summary>The full game library.</summary>
-    Library = 1,
-
-    /// <summary>Friends list, presence, and friend requests.</summary>
-    Friends = 2,
-
-    /// <summary>Collection management.</summary>
-    Collections = 3,
-
-    /// <summary>Library-wide achievement overview.</summary>
-    Achievements = 4,
-
     /// <summary>
-    /// The discovery catalogue: games that exist, as opposed to games installed.
+    /// Games the user has, with their collections and achievements.
     /// </summary>
-    /// <remarks>
-    /// A section of its own rather than a mode of the library. The library
-    /// answers "what do I have"; this answers "what is out there". Conflating
-    /// them would make every filter and every count ambiguous.
-    /// </remarks>
-    Discover = 5,
+    /// <remarks>The landing section: what someone opens a launcher to reach.</remarks>
+    Library = 0,
 
-    /// <summary>
-    /// The download queue.
-    /// </summary>
-    /// <remarks>
-    /// A section rather than a panel on the Discover page: downloads outlive the
-    /// page that started them, and burying a running transfer inside a catalogue
-    /// browser makes it hard to find precisely when someone wants to check on it.
-    /// </remarks>
-    Downloads = 7,
+    /// <summary>Games that exist, from the discovery catalogue.</summary>
+    Search = 1,
+
+    /// <summary>The download queue.</summary>
+    Downloads = 2,
+
+    /// <summary>Friend codes, requests and presence.</summary>
+    Friends = 3,
 
     /// <summary>Application settings.</summary>
-    /// <remarks>
-    /// Numbered 6 rather than 5 because a <c>Search</c> member briefly sat
-    /// between them and was removed — searching happens within a page rather than
-    /// in a section of its own. The gap it left has since been taken by
-    /// <see cref="Discover"/>. Settings keeps its value regardless: renumbering
-    /// an enum gains nothing and would silently change the meaning of any value
-    /// written down elsewhere.
-    /// </remarks>
-    Settings = 6
+    Settings = 4
+}
+
+/// <summary>
+/// One destination inside a top-level section.
+/// </summary>
+/// <remarks>
+/// Modelled as an object with an activation delegate rather than a second enum,
+/// so a section's sub-navigation is described where the section is defined
+/// instead of in a switch somewhere else that has to be kept in step with it.
+/// </remarks>
+public sealed class SubNavigationItem
+{
+    /// <summary>Stable identifier, used to restore the last choice.</summary>
+    public required string Key { get; init; }
+
+    /// <summary>What the tab says.</summary>
+    public required string Label { get; init; }
+
+    /// <summary>Shows this sub-view.</summary>
+    public required Func<CancellationToken, Task> ActivateAsync { get; init; }
 }

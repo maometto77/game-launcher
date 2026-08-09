@@ -42,10 +42,40 @@ public sealed class DialogSmokeTests
     public DialogSmokeTests(WpfTestHost wpf) => _wpf = wpf;
 
     [Fact]
-    public void MainWindow_builds_and_lays_out()
+    public async Task MainWindow_realises_every_section_and_its_sub_navigation()
     {
         using var host = new TestAppHost();
-        _wpf.Invoke(() => Realise(host.Resolve<MainWindow>()));
+        host.SeedSampleData();
+
+        var shell = host.Resolve<MainWindowViewModel>();
+
+        await _wpf.InvokeAsync(async () =>
+        {
+            var window = host.Resolve<MainWindow>();
+            PositionOffScreen(window);
+
+            try
+            {
+                window.Show();
+
+                // Every section in turn, with a layout pass after each. The
+                // sub-navigation strip has no tabs until something navigates, and
+                // an empty ItemsControl never instantiates its item container —
+                // so a shell realised before the first navigation would prove
+                // nothing about the strip at all.
+                foreach (var section in Enum.GetValues<NavigationSection>())
+                {
+                    await shell.NavigateCommand.ExecuteAsync(section);
+                    window.UpdateLayout();
+                }
+            }
+            finally
+            {
+                window.Close();
+            }
+        });
+
+        Assert.False(shell.HasError, shell.ErrorMessage);
     }
 
     [Fact]
@@ -526,6 +556,15 @@ public sealed class DialogSmokeTests
                 var discover = host.Resolve<DiscoverViewModel>();
                 await discover.OnNavigatedToAsync();
 
+                // The shell is navigated before it is shown, so its sub-navigation
+                // strip has the four Library tabs in it. Realised empty, the strip
+                // would never expand its item container template and a palette
+                // missing a key it uses would go on passing.
+                var shell = host.Resolve<MainWindowViewModel>();
+                await shell.InitializeAsync();
+
+                Assert.True(shell.HasSubSections);
+
                 _wpf.Invoke(() =>
                 {
                     theme.Apply(candidate);
@@ -575,10 +614,7 @@ public sealed class DialogSmokeTests
     /// </remarks>
     private static void Realise(Window window)
     {
-        window.WindowStartupLocation = WindowStartupLocation.Manual;
-        window.ShowInTaskbar = false;
-        window.Left = -32000;
-        window.Top = -32000;
+        PositionOffScreen(window);
 
         try
         {
@@ -589,6 +625,19 @@ public sealed class DialogSmokeTests
         {
             window.Close();
         }
+    }
+
+    /// <summary>
+    /// Places a window far off screen so a test run does not flash windows at
+    /// whoever is watching.
+    /// </summary>
+    /// <param name="window">The window about to be shown.</param>
+    private static void PositionOffScreen(Window window)
+    {
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+        window.ShowInTaskbar = false;
+        window.Left = -32000;
+        window.Top = -32000;
     }
 
     /// <summary>

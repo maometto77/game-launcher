@@ -99,6 +99,49 @@ public sealed class WpfTestHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// Runs asynchronous work on the user interface thread and awaits it from
+    /// the caller's thread.
+    /// </summary>
+    /// <param name="work">The work to run.</param>
+    /// <returns>A task that completes when the work does.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The host has been disposed.</exception>
+    /// <remarks>
+    /// Separate from <see cref="Invoke"/> because that one blocks the caller
+    /// while the dispatcher runs the delegate. Anything inside it that awaits
+    /// with <c>ConfigureAwait(true)</c> — which is every view model in this
+    /// application — would post its continuation to a dispatcher already
+    /// occupied running the delegate, and deadlock. Awaiting from the caller's
+    /// thread instead leaves the dispatcher free to pump those continuations.
+    /// </remarks>
+    public async Task InvokeAsync(Func<Task> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        Exception? captured = null;
+
+        await _dispatcher!.InvokeAsync(async () =>
+        {
+            try
+            {
+                await work().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        }).Task.Unwrap().ConfigureAwait(false);
+
+        if (captured is not null)
+        {
+            // Rethrown with its original stack intact so the failing XAML line is
+            // still identifiable in the test output.
+            ExceptionDispatchInfo.Capture(captured).Throw();
+        }
+    }
+
     /// <summary>Entry point for the STA thread.</summary>
     private void RunApplication()
     {

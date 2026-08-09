@@ -45,11 +45,35 @@ public sealed class NavigationService : INavigationService, IDisposable
     /// <inheritdoc />
     public ViewModelBase? Current { get; private set; }
 
+    /// <summary>Pages kept for the lifetime of the window, by type.</summary>
+    private readonly Dictionary<Type, ViewModelBase> _keptAlive = [];
+
     /// <inheritdoc />
     public bool CanGoBack => _backStack.Count > 0;
 
     /// <inheritdoc />
     public event EventHandler<ViewModelBase?>? CurrentChanged;
+
+    /// <inheritdoc />
+    public Task NavigateToKeptAliveAsync<TViewModel>(CancellationToken cancellationToken = default)
+        where TViewModel : ViewModelBase
+    {
+        // Resolved once and remembered. Page view models are registered
+        // transient so an ordinary navigation starts clean; a section reached
+        // from the sidebar wants the opposite, and this is where that choice is
+        // made rather than by changing the registration for every caller.
+        if (!_keptAlive.TryGetValue(typeof(TViewModel), out var target))
+        {
+            target = _services.GetRequiredService<TViewModel>();
+            _keptAlive[typeof(TViewModel)] = target;
+        }
+
+        // Nothing is pushed. These are the shell's own destinations, reached
+        // sideways from the sidebar or the tab strip, and Back to the one before
+        // would leave the strip pointing at a page that is no longer shown.
+        // Back exists for drilling into a game and coming out again.
+        return NavigateCoreAsync(target, pushCurrentOntoBackStack: false, initialize: null, cancellationToken);
+    }
 
     /// <inheritdoc />
     public Task NavigateToAsync<TViewModel>(CancellationToken cancellationToken = default)

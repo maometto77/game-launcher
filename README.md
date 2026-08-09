@@ -43,7 +43,9 @@ configured, and nothing in the launcher blocks on the network.
   warez distribution site. The two supported sources are an archive with a
   documented public API and a metadata site whose own `robots.txt` is honoured;
   everywhere else, you supply a URL that already points at a file.
-- No torrent or magnet link handling.
+- No bundled torrent client. Torrents and magnet links work only if you have
+  aria2c installed and switch it on; the launcher shells out to it and never
+  ships one. With aria2 off, every download is plain HTTP.
 - **Nothing is imported from a path a site's `robots.txt` disallows.**
   MyAbandonware disallows its download paths, so that source contributes titles,
   genres and screenshots only — never anything to download.

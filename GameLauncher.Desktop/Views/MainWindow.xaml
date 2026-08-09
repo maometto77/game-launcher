@@ -42,13 +42,13 @@
                                Text="Local library" />
                 </StackPanel>
 
+                <!--
+                    Five destinations, each answering a different question: what
+                    do I have, what exists, what is transferring, who am I
+                    playing with. Pages that answer the same question appear as
+                    sub-navigation in the header, not as another row here.
+                -->
                 <StackPanel Grid.Row="1">
-                    <RadioButton Command="{Binding NavigateCommand}"
-                                 CommandParameter="{x:Static models:NavigationSection.Home}"
-                                 Content="Home"
-                                 GroupName="Sections"
-                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Home}"
-                                 Style="{StaticResource NavItemStyle}" />
                     <RadioButton Command="{Binding NavigateCommand}"
                                  CommandParameter="{x:Static models:NavigationSection.Library}"
                                  Content="Library"
@@ -56,28 +56,22 @@
                                  IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Library}"
                                  Style="{StaticResource NavItemStyle}" />
                     <RadioButton Command="{Binding NavigateCommand}"
+                                 CommandParameter="{x:Static models:NavigationSection.Search}"
+                                 Content="Search catalog"
+                                 GroupName="Sections"
+                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Search}"
+                                 Style="{StaticResource NavItemStyle}" />
+                    <RadioButton Command="{Binding NavigateCommand}"
+                                 CommandParameter="{x:Static models:NavigationSection.Downloads}"
+                                 Content="Downloads"
+                                 GroupName="Sections"
+                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Downloads}"
+                                 Style="{StaticResource NavItemStyle}" />
+                    <RadioButton Command="{Binding NavigateCommand}"
                                  CommandParameter="{x:Static models:NavigationSection.Friends}"
                                  Content="Friends"
                                  GroupName="Sections"
                                  IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Friends}"
-                                 Style="{StaticResource NavItemStyle}" />
-                    <RadioButton Command="{Binding NavigateCommand}"
-                                 CommandParameter="{x:Static models:NavigationSection.Collections}"
-                                 Content="Collections"
-                                 GroupName="Sections"
-                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Collections}"
-                                 Style="{StaticResource NavItemStyle}" />
-                    <RadioButton Command="{Binding NavigateCommand}"
-                                 CommandParameter="{x:Static models:NavigationSection.Achievements}"
-                                 Content="Achievements"
-                                 GroupName="Sections"
-                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Achievements}"
-                                 Style="{StaticResource NavItemStyle}" />
-                    <RadioButton Command="{Binding NavigateCommand}"
-                                 CommandParameter="{x:Static models:NavigationSection.Discover}"
-                                 Content="Discover"
-                                 GroupName="Sections"
-                                 IsChecked="{Binding ActiveSection, Mode=OneWay, Converter={StaticResource EnumToBoolean}, ConverterParameter=Discover}"
                                  Style="{StaticResource NavItemStyle}" />
                 </StackPanel>
 
@@ -105,20 +99,45 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- Header -->
+            <!--
+                Header: Back, then the active section's sub-navigation. Both
+                live here rather than inside the pages, so the strip stays put
+                while the content beneath it changes.
+            -->
             <Border Grid.Row="0"
                     Height="52"
                     Background="{StaticResource BackgroundDeepBrush}"
                     BorderBrush="{StaticResource BorderSubtleBrush}"
                     BorderThickness="0,0,0,1">
                 <Grid Margin="16,0">
-                    <Button HorizontalAlignment="Left"
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button Grid.Column="0"
+                            Margin="0,0,20,0"
                             VerticalAlignment="Center"
                             Command="{Binding GoBackCommand}"
                             Content="&#x2190;  Back"
                             Style="{StaticResource LinkButtonStyle}"
                             ToolTip="Return to the previous page"
                             Visibility="{Binding CanGoBack, Converter={StaticResource BooleanToVisibility}}" />
+
+                    <!--
+                        Hidden when the section has a single page: one tab that
+                        cannot be switched away from is decoration, not
+                        navigation. The strip keeps its own selection, so
+                        returning to a section lands where the user left it.
+                    -->
+                    <ListBox Grid.Column="1"
+                             HorizontalAlignment="Left"
+                             VerticalAlignment="Center"
+                             DisplayMemberPath="Label"
+                             ItemsSource="{Binding SubSections}"
+                             SelectedItem="{Binding SelectedSubSection, Mode=TwoWay}"
+                             Style="{StaticResource SubNavStripStyle}"
+                             Visibility="{Binding HasSubSections, Converter={StaticResource BooleanToVisibility}}" />
                 </Grid>
             </Border>
 

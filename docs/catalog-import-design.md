@@ -1353,3 +1353,55 @@ metadata-only source — is delivered by §15.4 instead.
 5. **The Ludusavi manifest download is slow** (~3 minutes on a domestic
    connection for 16 MB). It is cached for a fortnight and fetched lazily, so
    this is a one-off background cost rather than a recurring one.
+
+## 16. Navigation — consolidating eight sidebar rows into five
+
+Adding Discover and Downloads took the sidebar to eight rows. A sidebar that
+grows a row per page stops being navigation and becomes a list, so the rows were
+reduced to five destinations, each answering a different question:
+
+| Section | Question | Pages |
+|---|---|---|
+| Library | what do I have | Overview, Installed games, Collections, Achievements |
+| Search catalog | what exists | Discover |
+| Downloads | what is transferring | Queue |
+| Friends | who am I playing with | Friends |
+| Settings | how is this configured | Settings |
+
+Settings keeps its place at the foot, apart from the content sections.
+
+### 16.1 Sub-navigation is data, not a second enum
+
+`NavigationSection` names only the five. What is inside one is a
+`SubNavigationItem` — key, label, and a delegate that shows the page — built by
+`MainWindowViewModel.BuildSubSections`. A second enum plus a switch to map it
+would have put the list of tabs and the code that opens them in two places that
+had to be kept in step.
+
+Sections with one entry still return it; the strip hides itself unless there is
+more than one. A single tab that cannot be switched away from is decoration.
+
+### 16.2 Pages are kept alive
+
+`INavigationService.NavigateToKeptAliveAsync<T>` resolves a page once and
+remembers it. The page view models stay registered transient, so an ordinary
+navigation still starts clean; the shell opts into reuse at the call site rather
+than changing the registration for every caller.
+
+This is what makes switching tabs cheap enough to be worth doing: Discover keeps
+its search text, facet filters and scroll position when the user glances at the
+download queue and comes back. `OnNavigatedToAsync` still runs on each visit, so
+data that should be fresh is refreshed while view state is not thrown away.
+
+Which tab was last open is remembered per section, so returning to Library lands
+on Achievements if that is where the user left it.
+
+### 16.3 Sideways movement does not stack
+
+Neither a section change nor a tab change pushes anything onto the back stack,
+and both clear it. Back exists for drilling into a game and coming out again.
+
+The alternative was tried and is worse: if tab changes stacked, pressing Back
+would show the previous tab's page while the strip still highlighted the tab the
+user had chosen. The two would disagree, and nothing on screen would explain
+why.
