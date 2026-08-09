@@ -48,6 +48,16 @@ public interface IAppPaths
     /// <summary>Folder holding rolling log files.</summary>
     string LogDirectory { get; }
 
+    /// <summary>
+    /// Folder users drop sourcing feed manifests and script stubs into.
+    /// </summary>
+    /// <remarks>
+    /// The only directory here whose contents the launcher reads rather than
+    /// writes. It is the extension point's whole contract: a file placed here is
+    /// picked up, and nothing outside it is executed or trusted.
+    /// </remarks>
+    string AdapterDirectory { get; }
+
     /// <summary>Folder used for in-progress downloads before they are extracted.</summary>
     string DownloadDirectory { get; }
 
@@ -131,6 +141,9 @@ public sealed class AppPaths : IAppPaths
     public string LogDirectory => Path.Combine(RootDirectory, "logs");
 
     /// <inheritdoc />
+    public string AdapterDirectory => Path.Combine(RootDirectory, "adapters");
+
+    /// <inheritdoc />
     public string DownloadDirectory => Path.Combine(RootDirectory, "downloads");
 
     /// <inheritdoc />
@@ -150,6 +163,7 @@ public sealed class AppPaths : IAppPaths
                      AvatarDirectory,
                      ListingImageDirectory,
                      LogDirectory,
+                     AdapterDirectory,
                      DownloadDirectory,
                      DefaultInstallDirectory
                  })

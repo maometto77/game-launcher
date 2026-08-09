@@ -13,6 +13,7 @@ using GameLauncher.Desktop.Services.Discovery.Install;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sourcing;
+using GameLauncher.Desktop.Services.Discovery.Sourcing.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Downloads;
@@ -213,7 +214,26 @@ public static class ServiceRegistration
         // Sourcing adapters answer "given this page, what can be downloaded" —
         // a different question from "what games exist", with different failure
         // modes, which is why they are a separate open set from ICatalogSource.
+        services.AddSingleton<ISourcingAdapter, InternetArchiveSourcingAdapter>();
         services.AddSingleton<ISourcingAdapter, MyAbandonwareSourcingAdapter>();
+
+        // The user's own feeds. One adapter serving any number of manifests
+        // dropped into the adapter directory, so adding a source is a file
+        // rather than a class — the feeds worth having are the ones nobody here
+        // has heard of.
+        services.AddSingleton<IFeedManifestStore, FeedManifestStore>();
+        services.AddSingleton<IScriptHookRunner, ScriptHookRunner>();
+        services.AddSingleton<ISourcingAdapter, ScriptableSourcingAdapter>();
+
+        services.AddHttpClient(ScriptableSourcingAdapter.HttpClientName, client =>
+        {
+            // A feed is a small document from a host this launcher knows nothing
+            // about. Short enough that an unresponsive one does not hold up an
+            // install, generous enough for a home server waking a disk.
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
         services.AddSingleton<IDownloadSourceResolver, DownloadSourceResolver>();
 
         services.AddSingleton<IListingInstallService, ListingInstallService>();

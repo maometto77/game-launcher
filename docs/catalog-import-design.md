@@ -1405,3 +1405,104 @@ The alternative was tried and is worse: if tab changes stacked, pressing Back
 would show the previous tab's page while the strip still highlighted the tab the
 user had chosen. The two would disagree, and nothing on screen would explain
 why.
+
+## 17. The pluggable sourcing engine
+
+Sourcing had one adapter that refuses and one path — the catalogue's own
+download rows — that only knows what the last import recorded. This round adds a
+user-extensible adapter and closes the Archive.org gap.
+
+### 17.1 Manifests, not plugin assemblies
+
+A feed is a YAML or JSON file in `%LOCALAPPDATA%\GameLauncher\adapters\`. It
+says which hosts it claims, what to fetch, and which field of the answer is
+which. `ScriptableSourcingAdapter` is a single `ISourcingAdapter` serving all of
+them.
+
+The alternative — loading assemblies that implement `ISourcingAdapter` — was not
+chosen. It would mean running arbitrary code inside this process with its file
+handles, database connection and user token, in exchange for expressiveness that
+a mapping table already provides. The interesting feeds are lists of addresses,
+and a list of addresses is data.
+
+Full contract: [`docs/sourcing-adapters.md`](sourcing-adapters.md).
+
+### 17.2 One node tree, four formats
+
+JSON, YAML, RSS and Atom are normalised into `FeedNode` at the parse boundary:
+a scalar, an ordered list, and named children. XML attributes become fields
+named `@name`, which is what lets `enclosure.@url` use the same path syntax as
+`files.0.name`.
+
+That normalisation is the reason a manifest describes *where its fields are*
+rather than *which dialect the publisher chose*, and the reason there is one
+path implementation instead of three. Element names are taken without their
+namespace so nobody has to write an XML namespace into a YAML file.
+
+Two accommodations for how publishers actually behave: a path reaching a single
+object where a list was expected yields a list of one, and an index against a
+non-list still means "the first thing". Feeds routinely publish an object for
+one item and an array for several.
+
+### 17.3 Script hooks are a pipe, not an interpreter
+
+`transform` names a program, handed the payload on standard input and expected
+to write JSON to standard output. Lua, JavaScript, Python and compiled binaries
+all satisfy that.
+
+No scripting engine is bundled. Beyond the dependency, an in-process interpreter
+would run a manifest's code with this application's own handles and identity,
+where a child process is something the operating system accounts for separately
+and the user can see. For code arriving from outside the application the weaker
+coupling is the point. Arguments naming a file in the adapter directory are
+resolved to it, so a hook cannot reach an arbitrary path elsewhere on the
+machine.
+
+### 17.4 The extension point does not skip the rules
+
+`robots.txt` is checked before any HTTP request a manifest makes, the same gate
+the shipped sources pass through. Local feed files are exempt — there is no site
+to ask — and are confined to the adapter directory, because a manifest naming
+`../../../../Windows/win.ini` would be a local file disclosure dressed as a feed.
+
+This is deliberate and it is the whole difference between an extension point and
+a hole. Zenodo demonstrates why it is not theoretical: its `robots.txt`
+disallows `/api` and then allows exactly `/api/records/*/files` back in, so the
+shipped example manifest is written against the endpoint the site permits and a
+search-based one would be refused.
+
+### 17.5 The Archive.org sourcing adapter
+
+`InternetArchiveSourcingAdapter` turns any `archive.org` address naming an item
+into direct addresses, both node-host mirrors, per-file SHA-1 and MD5, and the
+item's `.torrent` last.
+
+It exists because the catalogue import only knows what it recorded when it last
+ran, which leaves three cases uncovered: a listing whose download rows were never
+written because another source described it first, an item whose files changed
+after the import, and an address someone pasted in that was never imported at
+all.
+
+It handles *any* item rather than the collections the catalogue is configured
+for. Those settings answer a different question — which collections to import
+wholesale — and conflating them would mean a game found through one collection
+could not be installed from a link belonging to another.
+
+Verified against the live API rather than only the fixture: `d1`/`d2`/`dir` are
+present as expected, the torrent is listed with `source: metadata` and
+`format: Archive BitTorrent` under `<identifier>_archive.torrent`, and most
+MS-DOS emulation items carry `access-restricted-item: true` — which the adapter
+explains rather than offering addresses that would answer 403.
+
+### 17.6 What this round does not do
+
+1. **No adapter for a second preservation repository in code.** Archive.org is
+   the only large open repository publishing direct addresses, checksums *and*
+   torrents through a documented keyless API. The others worth having are
+   metadata-only or hold almost no games, so they are shipped as manifests
+   instead — which is what the framework is for.
+2. **Crawl-delay is not applied to sourcing.** `IRobotsPolicy` exposes it and the
+   importer honours it; a single request when a person clicks install is not a
+   crawl.
+3. **No user interface for manifests.** They are files, edited in a text editor,
+   and failures are reported to the log rather than on screen.

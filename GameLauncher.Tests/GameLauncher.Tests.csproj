@@ -45,4 +45,15 @@
     <None Include="Discovery\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    The example manifests shipped in docs, copied here so a test loads the very
+    files a user is told to copy. Documentation that has drifted from the code
+    is worse than none, and this is the only way to notice.
+  -->
+  <ItemGroup>
+    <None Include="..\docs\adapter-examples\**\*"
+          Link="AdapterExamples\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

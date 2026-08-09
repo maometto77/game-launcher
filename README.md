@@ -36,6 +36,13 @@ configured, and nothing in the launcher blocks on the network.
   one-click install through the same download path as everything else, with the
   checksum the source published. **Off by default:** nothing is fetched from any
   source until you turn it on in Settings.
+- **Custom sourcing feeds** — describe your own feed in a YAML or JSON file in
+  `%LOCALAPPDATA%\GameLauncher\adapters\` and the launcher takes download
+  addresses from it: a home server, a preservation project's export, an RSS feed
+  of releases, or a JSON file on this machine with no server at all. Checksums
+  and torrents come through the same path as everything else. When mapping is
+  not enough, a manifest can pipe the payload through a program you nominate.
+  [Full contract](docs/sourcing-adapters.md).
 
 ### Deliberately out of scope
 
@@ -43,12 +50,17 @@ configured, and nothing in the launcher blocks on the network.
   warez distribution site. The two supported sources are an archive with a
   documented public API and a metadata site whose own `robots.txt` is honoured;
   everywhere else, you supply a URL that already points at a file.
+- **No scripting engine.** A custom feed's `transform` runs a program you already
+  have, as a child process with a pipe on each end. Nothing is embedded, so no
+  manifest ever executes code inside the launcher.
 - No bundled torrent client. Torrents and magnet links work only if you have
   aria2c installed and switch it on; the launcher shells out to it and never
   ships one. With aria2 off, every download is plain HTTP.
-- **Nothing is imported from a path a site's `robots.txt` disallows.**
+- **Nothing is imported or fetched from a path a site's `robots.txt` disallows.**
   MyAbandonware disallows its download paths, so that source contributes titles,
-  genres and screenshots only — never anything to download.
+  genres and screenshots only — never anything to download. Custom feeds pass
+  through the same check: a manifest is your instruction to this launcher, not a
+  dispensation from the site's.
 - **No memory writing, process modification or DLL injection.** Memory
   achievements are read-only inspection: only `OpenProcess`,
   `ReadProcessMemory` and `CloseHandle` are imported anywhere in the project, and

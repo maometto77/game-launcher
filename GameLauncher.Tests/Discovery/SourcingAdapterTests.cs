@@ -1,3 +1,4 @@
+using System.Net;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Discovery;
@@ -47,6 +48,91 @@ public sealed class SourcingAdapterTests
 
         Assert.Equal(SourcingRefusal.NoPayload, permitted.Refusal);
         Assert.NotEqual(SourcingRefusal.DisallowedByRobots, permitted.Refusal);
+    }
+
+    [Theory]
+    [InlineData("https://archive.org/details/msdos_Doom_1993", true)]
+    [InlineData("https://archive.org/download/msdos_Doom_1993/Doom_1993.zip", true)]
+    [InlineData("https://archive.org/metadata/msdos_Doom_1993", true)]
+    [InlineData("https://www.archive.org/details/msdos_Doom_1993", true)]
+    [InlineData("https://archive.org/details/", false)]
+    [InlineData("https://archive.org/", false)]
+    [InlineData("https://www.myabandonware.com/game/doom-1id", false)]
+    public void The_archive_adapter_claims_any_address_naming_an_item(string url, bool expected) =>
+        Assert.Equal(expected, ArchiveAdapter(new StubHttpClientFactory()).CanHandle(url));
+
+    [Fact]
+    public async Task An_archive_item_yields_direct_addresses_their_mirrors_and_a_torrent()
+    {
+        // The gap this closes: an address that was never imported, or whose files
+        // changed since it was, still resolves — the catalogue only knows what it
+        // recorded when it last ran.
+        var http = new StubHttpClientFactory()
+            .Json("/metadata/msdos_Doom_1993", Fixture("archive-downloadable-item.json"));
+
+        var payload = await ArchiveAdapter(http).ExtractDownloadPayloadAsync(
+            Listing("Doom"), "https://archive.org/details/msdos_Doom_1993");
+
+        Assert.True(payload.HasDownloads);
+
+        var primary = payload.Downloads[0];
+
+        Assert.Equal(
+            "https://archive.org/download/msdos_Doom_1993/Doom_1993.zip", primary.Url);
+        Assert.Equal("dddddddddddddddddddddddddddddddddddddddd", primary.Sha1);
+        Assert.Equal("cccccccccccccccccccccccccccccccc", primary.Md5);
+        Assert.Equal(2359527, primary.SizeBytes);
+
+        // The node hosts the metadata names, as alternates rather than first:
+        // faster, but they stop working if the Archive moves the item.
+        Assert.Contains(payload.Downloads, download => download.Url.Contains("ia601403.us.archive.org"));
+        Assert.Contains(payload.Downloads, download => download.Url.Contains("ia801403.us.archive.org"));
+
+        // Last of all, because it needs aria2c and that may not be installed.
+        Assert.Equal(DownloadKind.Torrent, payload.Downloads[^1].Kind);
+        Assert.EndsWith("_archive.torrent", payload.Downloads[^1].Url, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_item_is_named_by_the_address_not_the_file_within_it()
+    {
+        var http = new StubHttpClientFactory()
+            .Json("/metadata/msdos_Doom_1993", Fixture("archive-downloadable-item.json"));
+
+        await ArchiveAdapter(http).ExtractDownloadPayloadAsync(
+            Listing("Doom"), "https://archive.org/download/msdos_Doom_1993/Doom_1993.zip");
+
+        // '/download/doom/doom.zip' names the item 'doom', not the file.
+        Assert.Equal("https://archive.org/metadata/msdos_Doom_1993", Assert.Single(http.Requests));
+    }
+
+    [Fact]
+    public async Task An_access_restricted_item_is_explained_rather_than_offered()
+    {
+        // Its addresses answer 403. Offering them would turn a clear explanation
+        // into a failed download.
+        var http = new StubHttpClientFactory()
+            .Json("/metadata/", Fixture("archive-restricted-item.json"));
+
+        var payload = await ArchiveAdapter(http).ExtractDownloadPayloadAsync(
+            Listing("Restricted"), "https://archive.org/details/restricted_item");
+
+        Assert.False(payload.HasDownloads);
+        Assert.Equal(SourcingRefusal.NoPayload, payload.Refusal);
+        Assert.Contains("viewed but not downloaded", payload.Explanation);
+    }
+
+    [Fact]
+    public async Task An_item_the_archive_does_not_have_is_not_reported_as_unreachable()
+    {
+        // The distinction the caller acts on: a missing item never appears, an
+        // unreachable site is worth trying again.
+        var http = new StubHttpClientFactory().Status("/metadata/", HttpStatusCode.NotFound);
+
+        var payload = await ArchiveAdapter(http).ExtractDownloadPayloadAsync(
+            Listing("Nothing"), "https://archive.org/details/no_such_item");
+
+        Assert.Equal(SourcingRefusal.NoPayload, payload.Refusal);
     }
 
     [Fact]
@@ -168,6 +254,12 @@ public sealed class SourcingAdapterTests
 
     private static MyAbandonwareSourcingAdapter Adapter(bool allowDownloads) =>
         new(new FixedRobots(allowDownloads), NullLogger<MyAbandonwareSourcingAdapter>.Instance);
+
+    private static InternetArchiveSourcingAdapter ArchiveAdapter(StubHttpClientFactory http) =>
+        new(http, NullLogger<InternetArchiveSourcingAdapter>.Instance);
+
+    private static string Fixture(string name) =>
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Discovery", "Fixtures", name));
 
     private static DownloadSourceResolver Resolver(TestAppHost host) =>
         new(

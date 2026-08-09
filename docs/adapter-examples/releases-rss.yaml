@@ -1,0 +1,37 @@
+# An RSS or Atom feed of releases.
+#
+# Copy into %LOCALAPPDATA%\GameLauncher\adapters\ and change the host and URL.
+#
+# One reader serves both dialects. Element names are taken without their
+# namespace, so an Atom feed's <entry> is reached as 'entry' — you never have to
+# write an XML namespace into a YAML file. For Atom, use:
+#
+#     items: entry
+#     map:
+#       url: link.@href
+#
+# robots.txt is checked before the feed is fetched, exactly as it is for the
+# sources this launcher ships with.
+
+key: releases
+displayName: Releases feed
+enabled: true
+
+match:
+  hosts: [releases.example.org]
+
+request:
+  url: https://releases.example.org/feed.xml
+  headers:
+    Accept: application/rss+xml, application/atom+xml
+
+format: feed
+
+# RSS 2.0 nests items under <channel>; Atom puts <entry> at the top.
+items: channel.item
+
+map:
+  # '@' reads an XML attribute, in the same path syntax as everything else.
+  url: enclosure.@url
+  sizeBytes: enclosure.@length
+  title: title
