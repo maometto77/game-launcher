@@ -260,15 +260,20 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="RadioButton">
-                    <Grid>
+                    <Grid Margin="0,1">
+                        <!-- Rounded on the right only: the left edge meets the
+                             window and the accent rule, and rounding it would
+                             leave a sliver of background beside the marker. -->
                         <Border x:Name="Root"
                                 Background="Transparent"
+                                CornerRadius="0,6,6,0"
                                 SnapsToDevicePixels="True" />
                         <!-- Selection is marked with a left accent rule, as in Steam's sidebar -->
                         <Border x:Name="Marker"
                                 Width="3"
                                 HorizontalAlignment="Left"
                                 Background="{StaticResource AccentBrush}"
+                                CornerRadius="0,2,2,0"
                                 Visibility="Collapsed" />
                         <ContentPresenter Margin="{TemplateBinding Padding}"
                                           HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"

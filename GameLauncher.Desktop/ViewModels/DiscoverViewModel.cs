@@ -2,12 +2,15 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameLauncher.Desktop.Infrastructure;
+using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Discovery.Images;
 using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Discovery.Install;
 using GameLauncher.Desktop.Services.Download;
+using GameLauncher.Desktop.Services.Downloads;
+using GameLauncher.Desktop.Services.Saves;
 using GameLauncher.Desktop.Services.Settings;
 using Microsoft.Extensions.Logging;
 
@@ -36,6 +39,8 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     private readonly ICatalogListingRepository _listings;
     private readonly IListingImageCache _images;
     private readonly IListingInstallService _install;
+    private readonly IDownloadQueue _queue;
+    private readonly ISavePathResolver _saves;
     private readonly ICatalogImportService _import;
     private readonly ISettingsService _settings;
     private readonly IDialogService _dialogs;
@@ -85,7 +90,9 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     /// </summary>
     /// <param name="listings">Supplies the catalogue.</param>
     /// <param name="images">Resolves cover art on demand.</param>
-    /// <param name="install">Installs a listing through the existing download path.</param>
+    /// <param name="install">Reads a listing's mirrors for the details shown on a card.</param>
+    /// <param name="queue">Runs the download and reports what each card's button should say.</param>
+    /// <param name="saves">Consulted, without loading, for the save badge.</param>
     /// <param name="import">Consulted for whether a refresh is running, and to start one.</param>
     /// <param name="settings">Supplies whether discovery is switched on.</param>
     /// <param name="dialogs">Confirmation and error prompts.</param>
@@ -96,6 +103,8 @@ public sealed partial class DiscoverViewModel : ViewModelBase
         ICatalogListingRepository listings,
         IListingImageCache images,
         IListingInstallService install,
+        IDownloadQueue queue,
+        ISavePathResolver saves,
         ICatalogImportService import,
         ISettingsService settings,
         IDialogService dialogs,
@@ -105,6 +114,8 @@ public sealed partial class DiscoverViewModel : ViewModelBase
         _listings = listings ?? throw new ArgumentNullException(nameof(listings));
         _images = images ?? throw new ArgumentNullException(nameof(images));
         _install = install ?? throw new ArgumentNullException(nameof(install));
+        _queue = queue ?? throw new ArgumentNullException(nameof(queue));
+        _saves = saves ?? throw new ArgumentNullException(nameof(saves));
         _import = import ?? throw new ArgumentNullException(nameof(import));
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
@@ -118,6 +129,7 @@ public sealed partial class DiscoverViewModel : ViewModelBase
         IsDiscoveryEnabled = _settings.Current.DiscoveryEnabled;
 
         _import.CatalogUpdated += OnCatalogUpdated;
+        _queue.JobChanged += OnQueueChanged;
 
         await LoadFacetsAsync(cancellationToken).ConfigureAwait(true);
         await QueryAsync(reset: true, cancellationToken).ConfigureAwait(true);
@@ -127,6 +139,7 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     public override Task OnNavigatedFromAsync()
     {
         _import.CatalogUpdated -= OnCatalogUpdated;
+        _queue.JobChanged -= OnQueueChanged;
 
         _queryCancellation?.Cancel();
         _queryCancellation?.Dispose();
@@ -165,72 +178,37 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Installs a listing, confirming the executable before adding it.
+    /// Adds a listing to the download queue.
     /// </summary>
-    /// <param name="item">The tile to install.</param>
-    /// <returns>A task that completes when the install finishes or is abandoned.</returns>
+    /// <param name="item">The card whose button was pressed.</param>
+    /// <remarks>
+    /// Hands the work to the queue and returns. The card then reports the
+    /// queue's state rather than its own, so the button says the same thing
+    /// whether the user stays on this page, navigates away, or comes back.
+    /// </remarks>
     [RelayCommand]
-    private async Task InstallAsync(ListingItemViewModel? item)
+    private void Install(ListingItemViewModel? item)
     {
         if (item is null)
         {
             return;
         }
 
-        if (!_dialogs.Confirm("Install game", $"Download and install '{item.Title}'?"))
+        ClearError();
+
+        // A finished download waiting for its executable is completed on the
+        // Downloads page, where the choice can actually be presented.
+        if (item.Listing.IsDownloadable is false && !item.IsQueued)
         {
+            SetErrorMessage($"'{item.Title}' is listed but no source offers a download for it.");
             return;
         }
 
-        IsBusy = true;
-        ClearError();
+        var job = _queue.Enqueue(item.ListingId, item.Title);
 
-        try
-        {
-            var progress = new Progress<InstallProgress>(update => StatusMessage = update.Message);
-            var result = await _install.PrepareAsync(item.ListingId, progress).ConfigureAwait(true);
+        item.ApplyQueueState(job);
 
-            if (!result.Succeeded)
-            {
-                SetErrorMessage(result.Message);
-                return;
-            }
-
-            var candidate = result.Preparation!.Candidates.FirstOrDefault();
-
-            if (candidate is null)
-            {
-                // Nothing to launch was found. The files are still on disk, so
-                // the user can point at an executable themselves rather than
-                // having the download thrown away.
-                SetErrorMessage(
-                    $"'{item.Title}' was downloaded to {result.Preparation.InstallDirectory}, " +
-                    "but no executable was found in it.");
-
-                return;
-            }
-
-            var game = await _install
-                .CompleteAsync(result.Listing, candidate.ExecutablePath, result.Preparation.InstallDirectory)
-                .ConfigureAwait(true);
-
-            StatusMessage = game is null
-                ? null
-                : $"'{game.Title}' was added to your library.";
-        }
-        catch (OperationCanceledException)
-        {
-            StatusMessage = null;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Installing '{Title}' failed.", item.Title);
-            SetErrorMessage($"Installing '{item.Title}' failed: {ex.Message}");
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        StatusMessage = $"'{item.Title}' added to the download queue.";
     }
 
     /// <summary>
@@ -334,7 +312,11 @@ public sealed partial class DiscoverViewModel : ViewModelBase
 
             foreach (var listing in page.Items)
             {
-                ListingsView.Add(new ListingItemViewModel(listing, _images));
+                var item = new ListingItemViewModel(listing, _images);
+
+                item.ApplyQueueState(FindJob(listing.ListingId));
+
+                ListingsView.Add(item);
             }
 
             _total = page.TotalCount;
@@ -345,9 +327,10 @@ public sealed partial class DiscoverViewModel : ViewModelBase
                 ? "Nothing matches."
                 : $"Showing {ListingsView.Count} of {_total:N0}.";
 
-            // Covers are fetched after the tiles exist, so the list appears at
-            // once and fills in rather than waiting on the network.
+            // Covers and save badges are resolved after the cards exist, so the
+            // grid appears at once and fills in rather than waiting on either.
             _ = LoadCoversAsync(page.Items.Count, token);
+            _ = LoadSaveBadgesAsync(page.Items.Count, token);
         }
         catch (OperationCanceledException)
         {
@@ -379,6 +362,70 @@ public sealed partial class DiscoverViewModel : ViewModelBase
             await tile.LoadCoverAsync(cancellationToken).ConfigureAwait(true);
         }
     }
+
+    /// <summary>
+    /// Marks the cards whose game the save manifest already covers.
+    /// </summary>
+    /// <param name="added">How many cards were appended.</param>
+    /// <param name="cancellationToken">Cancels the lookups.</param>
+    /// <remarks>
+    /// Skipped entirely unless the manifest is already loaded. Browsing a
+    /// catalogue must never trigger a sixteen-megabyte download to decide
+    /// whether to draw a badge.
+    /// </remarks>
+    private async Task LoadSaveBadgesAsync(int added, CancellationToken cancellationToken)
+    {
+        if (!_saves.IsLoaded)
+        {
+            return;
+        }
+
+        var cards = ListingsView.Skip(Math.Max(0, ListingsView.Count - added)).ToArray();
+
+        foreach (var card in cards)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            try
+            {
+                var result = await _saves
+                    .ResolveAsync(new SavePathQuery { Title = card.Title, IncludeMissing = true },
+                        cancellationToken)
+                    .ConfigureAwait(true);
+
+                card.ApplySaveState(result.Found);
+            }
+            catch (Exception ex)
+            {
+                // A badge is decoration. Losing one must not disturb the page.
+                _logger.LogDebug(ex, "Resolving saves for '{Title}' failed.", card.Title);
+            }
+        }
+    }
+
+    /// <summary>Finds the queue's job for a listing, if it has one.</summary>
+    /// <param name="listingId">The listing to look for.</param>
+    /// <returns>The job, or <see langword="null"/>.</returns>
+    private DownloadJob? FindJob(string listingId) =>
+        _queue.Jobs.FirstOrDefault(job =>
+            string.Equals(job.ListingId, listingId, StringComparison.Ordinal));
+
+    /// <summary>
+    /// Updates the card whose game the queue just reported on.
+    /// </summary>
+    /// <param name="sender">The queue.</param>
+    /// <param name="e">The job that changed.</param>
+    private void OnQueueChanged(object? sender, DownloadJobEventArgs e) =>
+        _dispatcher.Invoke(() =>
+        {
+            var card = ListingsView.FirstOrDefault(item =>
+                string.Equals(item.ListingId, e.Job.ListingId, StringComparison.Ordinal));
+
+            card?.ApplyQueueState(e.Job);
+        });
 
     /// <summary>
     /// Reports that a background refresh changed the catalogue.

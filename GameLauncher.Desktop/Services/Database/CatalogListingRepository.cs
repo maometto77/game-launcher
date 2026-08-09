@@ -989,6 +989,15 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
                 new { Ids = ids },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
+        var sources = await connection.QueryAsync<ListingValueRow>(
+            new CommandDefinition(
+                """
+                SELECT ListingId, SourceKey AS Value FROM ListingSource
+                WHERE  ListingId IN @Ids ORDER BY Rank, SourceKey;
+                """,
+                new { Ids = ids },
+                cancellationToken: cancellationToken)).ConfigureAwait(false);
+
         var downloads = await connection.QueryAsync<ListingDownload>(
             new CommandDefinition(
                 """
@@ -1020,6 +1029,11 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
         foreach (var group in tags.GroupBy(row => row.ListingId, StringComparer.Ordinal))
         {
             byId[group.Key].Tags = group.Select(row => row.Value).ToArray();
+        }
+
+        foreach (var group in sources.GroupBy(row => row.ListingId, StringComparer.Ordinal))
+        {
+            byId[group.Key].SourceKeys = group.Select(row => row.Value).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         foreach (var group in downloads.GroupBy(row => row.ListingId, StringComparer.Ordinal))

@@ -34,6 +34,26 @@ public sealed partial class DownloadsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isEmpty = true;
 
+    /// <summary>Combined transfer rate across everything downloading.</summary>
+    [ObservableProperty]
+    private string _totalSpeedText = "—";
+
+    /// <summary>How many downloads are waiting for a slot.</summary>
+    [ObservableProperty]
+    private string _queuedCountText = "0";
+
+    /// <summary>
+    /// When everything currently queued should be finished.
+    /// </summary>
+    /// <remarks>
+    /// Computed from the bytes still outstanding across every job over the
+    /// combined rate, rather than by adding up each job's own estimate. Those
+    /// estimates assume each job has the whole connection to itself, so summing
+    /// them roughly doubles the answer whenever two are running.
+    /// </remarks>
+    [ObservableProperty]
+    private string _estimatedCompletionText = "—";
+
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
@@ -243,6 +263,41 @@ public sealed partial class DownloadsViewModel : ViewModelBase
         UpdateSummary();
     }
 
+    /// <summary>
+    /// Works out when everything outstanding should be done.
+    /// </summary>
+    /// <param name="jobs">Every job in the queue.</param>
+    /// <param name="rate">Combined current rate, in bytes per second.</param>
+    /// <returns>A short phrase, or an em dash when it cannot be estimated.</returns>
+    private static string DescribeCompletion(IReadOnlyList<DownloadJob> jobs, double rate)
+    {
+        if (rate <= 0)
+        {
+            return "—";
+        }
+
+        // Only jobs whose size is known can contribute. One unknown among them
+        // makes the total a lower bound, which is still worth showing — an
+        // estimate that disappears whenever a server omits a length would be
+        // less useful than one that is occasionally optimistic.
+        var outstanding = jobs
+            .Where(job => !job.IsTerminal && job.TotalBytes is > 0)
+            .Sum(job => Math.Max(0, job.TotalBytes!.Value - job.BytesReceived));
+
+        if (outstanding <= 0)
+        {
+            return "—";
+        }
+
+        var remaining = TimeSpan.FromSeconds(outstanding / rate);
+
+        return remaining.TotalHours >= 1
+            ? $"about {(int)remaining.TotalHours}h {remaining.Minutes}m"
+            : remaining.TotalMinutes >= 1
+                ? $"about {(int)remaining.TotalMinutes}m"
+                : "less than a minute";
+    }
+
     /// <summary>Recomputes the header line.</summary>
     private void UpdateSummary()
     {
@@ -253,6 +308,9 @@ public sealed partial class DownloadsViewModel : ViewModelBase
         if (IsEmpty)
         {
             SummaryText = string.Empty;
+            TotalSpeedText = "—";
+            QueuedCountText = "0";
+            EstimatedCompletionText = "—";
             return;
         }
 
@@ -263,6 +321,10 @@ public sealed partial class DownloadsViewModel : ViewModelBase
         var rate = jobs
             .Where(job => job.Phase == DownloadPhase.Downloading)
             .Sum(job => job.BytesPerSecond);
+
+        TotalSpeedText = rate > 0 ? $"{rate / (1024 * 1024):0.0} MB/s" : "—";
+        QueuedCountText = waiting.ToString(System.Globalization.CultureInfo.CurrentCulture);
+        EstimatedCompletionText = DescribeCompletion(jobs, rate);
 
         var parts = new List<string> { $"{active} active" };
 

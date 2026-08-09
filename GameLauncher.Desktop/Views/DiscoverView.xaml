@@ -94,47 +94,79 @@
 
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Width="170"
-                                    Margin="0,0,16,18"
-                                    Background="{StaticResource SurfaceBrush}"
-                                    CornerRadius="6">
+                            <Border Style="{StaticResource GameCardStyle}">
                                 <StackPanel>
-                                    <Grid Height="230">
-                                        <!-- Neutral placeholder shown only until real cover art arrives -->
+                                    <!-- Artwork, drawn at a fixed 2:3 so a grid of
+                                         cards lines up whatever each source supplied. -->
+                                    <Grid Height="{StaticResource CardArtHeight}">
                                         <Border Background="{StaticResource SurfaceRaisedBrush}"
-                                                CornerRadius="6,6,0,0">
+                                                CornerRadius="7,7,0,0">
                                             <TextBlock Text="{Binding Title}"
                                                        Style="{StaticResource MutedTextStyle}"
                                                        TextWrapping="Wrap"
                                                        TextAlignment="Center"
-                                                       Margin="12"
+                                                       Margin="14"
                                                        VerticalAlignment="Center" />
                                         </Border>
 
-                                        <Image Source="{Binding CoverPath, Converter={StaticResource PathToImage}}"
-                                               Stretch="UniformToFill" />
+                                        <Border CornerRadius="7,7,0,0" ClipToBounds="True">
+                                            <Image Source="{Binding CoverPath, Converter={StaticResource PathToImage}}"
+                                                   Stretch="UniformToFill" />
+                                        </Border>
+
+                                        <!-- Save badge sits over the artwork so it is
+                                             visible while scanning, not buried in text. -->
+                                        <Border Style="{StaticResource SaveBadgeStyle}"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
+                                                Margin="8"
+                                                ToolTip="Ludusavi knows where this game keeps its saves."
+                                                Visibility="{Binding HasKnownSaves, Converter={StaticResource BooleanToVisibility}}">
+                                            <TextBlock Text="Saves known"
+                                                       Style="{StaticResource BadgeTextStyle}"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                                        </Border>
                                     </Grid>
 
-                                    <StackPanel Margin="10,8,10,10">
+                                    <StackPanel Margin="11,9,11,11">
                                         <TextBlock Text="{Binding Title}"
                                                    Style="{StaticResource SubheadingTextStyle}"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding Title}" />
 
-                                        <TextBlock Text="{Binding YearText}"
-                                                   Style="{StaticResource CaptionTextStyle}"
-                                                   Margin="0,2,0,0" />
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                            <TextBlock Text="{Binding YearText}"
+                                                       Style="{StaticResource CaptionTextStyle}" />
+                                            <TextBlock Text="{Binding Attribution}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       Margin="8,0,0,0"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
 
-                                        <TextBlock Text="{Binding Attribution}"
-                                                   Style="{StaticResource CaptionTextStyle}"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Margin="0,2,0,0" />
+                                        <!-- Where this game can be found. -->
+                                        <ItemsControl ItemsSource="{Binding SourceBadges}"
+                                                      Margin="0,8,0,0"
+                                                      Visibility="{Binding HasSourceBadges, Converter={StaticResource BooleanToVisibility}}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource BadgeStyle}">
+                                                        <TextBlock Text="{Binding}"
+                                                                   Style="{StaticResource BadgeTextStyle}" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
 
-                                        <Button Content="Install"
-                                                Margin="0,10,0,0"
+                                        <Button Content="{Binding ActionText}"
+                                                Margin="0,9,0,0"
                                                 HorizontalAlignment="Stretch"
                                                 Style="{StaticResource PrimaryButtonStyle}"
-                                                IsEnabled="{Binding IsDownloadable}"
+                                                IsEnabled="{Binding IsActionEnabled}"
                                                 Command="{Binding DataContext.InstallCommand,
                                                           RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                                                 CommandParameter="{Binding}" />

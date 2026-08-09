@@ -65,6 +65,9 @@ public sealed class LudusaviSavePathResolver : ISavePathResolver
     private string CachePath => Path.Combine(_paths.RootDirectory, "ludusavi-manifest.yaml");
 
     /// <inheritdoc />
+    public bool IsLoaded => _index is not null;
+
+    /// <inheritdoc />
     public async Task<bool> IsAvailableAsync(CancellationToken cancellationToken = default) =>
         await LoadAsync(cancellationToken).ConfigureAwait(false) is { Games.Count: > 0 };
 

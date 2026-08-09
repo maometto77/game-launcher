@@ -140,6 +140,17 @@ public sealed class CatalogListing
     /// <summary>Free-form tags, populated by queries that ask for them.</summary>
     public IReadOnlyList<string> Tags { get; set; } = [];
 
+    /// <summary>
+    /// Which sources describe this game, populated by queries that ask for them.
+    /// </summary>
+    /// <remarks>
+    /// Read from the observation rows rather than inferred from
+    /// <see cref="PrimarySourceKey"/>, which names only the source that won the
+    /// most fields. A card showing where a game can be found has to show all of
+    /// them, not the winner.
+    /// </remarks>
+    public IReadOnlyList<string> SourceKeys { get; set; } = [];
+
     /// <summary>Downloadable files, populated by queries that ask for them.</summary>
     public IReadOnlyList<ListingDownload> Downloads { get; set; } = [];
 

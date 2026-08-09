@@ -23,6 +23,7 @@
                 <ResourceDictionary Source="Resources/Theme/Buttons.xaml" />
                 <ResourceDictionary Source="Resources/Theme/Inputs.xaml" />
                 <ResourceDictionary Source="Resources/Theme/Lists.xaml" />
+                <ResourceDictionary Source="Resources/Theme/Cards.xaml" />
                 <ResourceDictionary Source="Resources/Converters.xaml" />
                 <ResourceDictionary Source="Resources/ViewTemplates.xaml" />
             </ResourceDictionary.MergedDictionaries>

@@ -14,25 +14,66 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid Grid.Row="0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+        <StackPanel Grid.Row="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="Downloads" Style="{StaticResource TitleTextStyle}" />
-                <TextBlock Text="{Binding SummaryText}"
-                           Style="{StaticResource MutedTextStyle}"
-                           Margin="0,4,0,0" />
-            </StackPanel>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Downloads" Style="{StaticResource TitleTextStyle}" />
+                    <TextBlock Text="{Binding SummaryText}"
+                               Style="{StaticResource MutedTextStyle}"
+                               Margin="0,4,0,0" />
+                </StackPanel>
 
-            <Button Grid.Column="1"
-                    VerticalAlignment="Bottom"
-                    Content="Clear finished"
-                    Command="{Binding ClearFinishedCommand}"
-                    Style="{StaticResource SecondaryButtonStyle}" />
-        </Grid>
+                <Button Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        Content="Clear finished"
+                        Command="{Binding ClearFinishedCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+            </Grid>
+
+            <!-- Aggregate stats. Fixed-width columns so the numbers do not
+                 shuffle sideways as they change several times a second. -->
+            <Border Margin="0,16,0,0"
+                    Padding="18,12"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="TOTAL SPEED" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding TotalSpeedText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="QUEUED" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding QueuedCountText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="ESTIMATED COMPLETION" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding EstimatedCompletionText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <Grid Grid.Row="1" Margin="0,20,0,0">
             <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -40,10 +81,7 @@
                 <ItemsControl ItemsSource="{Binding Items}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Margin="0,0,0,10"
-                                    Padding="16,13"
-                                    Background="{StaticResource SurfaceBrush}"
-                                    CornerRadius="6">
+                            <Border Style="{StaticResource DownloadRowStyle}">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
@@ -157,19 +195,39 @@
                                                    Style="{StaticResource CaptionTextStyle}"
                                                    TextTrimming="CharacterEllipsis" />
 
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                            <TextBlock Text="{Binding PeersText}"
+                                        <!-- Fixed widths and right alignment: these
+                                             values change several times a second, and a
+                                             stack that resizes to fit them makes the whole
+                                             row twitch. -->
+                                        <Grid Grid.Column="1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="80" />
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="90" />
+                                                <ColumnDefinition Width="110" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding PeersText}"
                                                        Style="{StaticResource CaptionTextStyle}"
-                                                       Margin="0,0,14,0" />
-                                            <TextBlock Text="{Binding SizeText}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding SizeText}"
                                                        Style="{StaticResource CaptionTextStyle}"
-                                                       Margin="0,0,14,0" />
-                                            <TextBlock Text="{Binding SpeedText}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SpeedText}"
                                                        Style="{StaticResource CaptionTextStyle}"
-                                                       Margin="0,0,14,0" />
-                                            <TextBlock Text="{Binding EtaText}"
-                                                       Style="{StaticResource CaptionTextStyle}" />
-                                        </StackPanel>
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding EtaText}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Grid>
                                     </Grid>
                                 </Grid>
                             </Border>

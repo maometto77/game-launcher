@@ -99,6 +99,16 @@ public sealed record SavePathResult(string? MatchedTitle, IReadOnlyList<SaveLoca
 public interface ISavePathResolver
 {
     /// <summary>
+    /// Gets a value indicating whether the manifest is already loaded.
+    /// </summary>
+    /// <remarks>
+    /// Does not fetch, parse or block. Exists so that browsing a catalogue can
+    /// show a save badge when the answer is already known without a page of
+    /// tiles triggering a sixteen-megabyte download nobody asked for.
+    /// </remarks>
+    bool IsLoaded { get; }
+
+    /// <summary>
     /// Gets a value indicating whether a usable manifest is available.
     /// </summary>
     /// <param name="cancellationToken">Cancels any fetch this triggers.</param>

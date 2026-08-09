@@ -1,16 +1,18 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Discovery.Images;
+using GameLauncher.Desktop.Services.Discovery.Sources;
 
 namespace GameLauncher.Desktop.ViewModels;
 
 /// <summary>
-/// One catalogue listing as a tile.
+/// One catalogue listing as a card.
 /// </summary>
 /// <remarks>
-/// Artwork is resolved lazily by <see cref="LoadCoverAsync"/> rather than in the
-/// constructor. A page of sixty tiles constructed eagerly would start sixty
-/// downloads whether or not the user scrolled far enough to see them.
+/// Artwork and the save badge are both resolved lazily rather than in the
+/// constructor. A page of sixty cards built eagerly would start sixty downloads
+/// and sixty manifest lookups whether or not anyone scrolled far enough to see
+/// them.
 /// </remarks>
 public sealed partial class ListingItemViewModel : ObservableObject
 {
@@ -30,9 +32,11 @@ public sealed partial class ListingItemViewModel : ObservableObject
         // A path already recorded by an earlier visit shows immediately; anything
         // else waits for LoadCoverAsync.
         _coverPath = listing.CoverImagePath;
+
+        SourceBadges = listing.SourceKeys.Select(Describe).ToArray();
     }
 
-    /// <summary>Gets the listing behind this tile.</summary>
+    /// <summary>Gets the listing behind this card.</summary>
     public CatalogListing Listing { get; }
 
     /// <summary>Gets the listing's identity.</summary>
@@ -53,9 +57,41 @@ public sealed partial class ListingItemViewModel : ObservableObject
     /// <summary>Gets a value indicating whether the listing can be installed.</summary>
     public bool IsDownloadable => Listing.IsDownloadable;
 
+    /// <summary>Gets the sources that describe this game, as short labels.</summary>
+    public IReadOnlyList<string> SourceBadges { get; }
+
+    /// <summary>Gets a value indicating whether any source badge should be drawn.</summary>
+    public bool HasSourceBadges => SourceBadges.Count > 0;
+
     /// <summary>Gets the local path of the cover, or <see langword="null"/> until it is fetched.</summary>
     [ObservableProperty]
     private string? _coverPath;
+
+    /// <summary>
+    /// Whether the save manifest knows where this game keeps its saves.
+    /// </summary>
+    /// <remarks>
+    /// Only ever set from an already-loaded manifest, so browsing never triggers
+    /// a download to answer it.
+    /// </remarks>
+    [ObservableProperty]
+    private bool _hasKnownSaves;
+
+    /// <summary>What the card's primary button says.</summary>
+    [ObservableProperty]
+    private string _actionText = "Install";
+
+    /// <summary>Whether the primary button can be pressed.</summary>
+    [ObservableProperty]
+    private bool _isActionEnabled = true;
+
+    /// <summary>Whether this game is somewhere in the download queue.</summary>
+    [ObservableProperty]
+    private bool _isQueued;
+
+    /// <summary>Whether this game has been installed.</summary>
+    [ObservableProperty]
+    private bool _isInstalled;
 
     /// <summary>
     /// Fetches the cover if it is not already cached.
@@ -73,4 +109,57 @@ public sealed partial class ListingItemViewModel : ObservableObject
             .GetAsync(Listing.ListingId, Listing.CoverImageUrl, cancellationToken)
             .ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// Updates the primary button from the queue's view of this game.
+    /// </summary>
+    /// <param name="job">The job for this listing, or <see langword="null"/> when there is none.</param>
+    /// <remarks>
+    /// The button reports the queue's state rather than its own, so pressing
+    /// Install once and navigating away and back still shows what is happening.
+    /// </remarks>
+    public void ApplyQueueState(DownloadJob? job)
+    {
+        IsQueued = job is not null && !job.IsTerminal;
+        IsInstalled = job?.Phase == DownloadPhase.Completed;
+
+        (ActionText, IsActionEnabled) = job?.Phase switch
+        {
+            null => ("Install", IsDownloadable),
+            DownloadPhase.Queued => ("Queued", false),
+            DownloadPhase.Paused => ("Paused", false),
+            DownloadPhase.Downloading when job.Fraction is { } fraction =>
+                ($"{fraction * 100:0}%", false),
+            DownloadPhase.Downloading => ("Downloading", false),
+            DownloadPhase.Resolving => ("Finding…", false),
+            DownloadPhase.Verifying => ("Verifying", false),
+            DownloadPhase.Extracting => ("Extracting", false),
+            DownloadPhase.Detecting => ("Detecting", false),
+            DownloadPhase.ReadyToInstall => ("Finish install", true),
+            DownloadPhase.Completed => ("Installed", false),
+            DownloadPhase.Failed => ("Retry", true),
+            _ => ("Install", IsDownloadable)
+        };
+    }
+
+    /// <summary>Records whether the save manifest covers this game.</summary>
+    /// <param name="known">Whether a save location was resolved.</param>
+    public void ApplySaveState(bool known) => HasKnownSaves = known;
+
+    /// <summary>
+    /// Turns a source key into something worth showing on a card.
+    /// </summary>
+    /// <param name="sourceKey">The dispatch key.</param>
+    /// <returns>A short label.</returns>
+    /// <remarks>
+    /// MyAbandonware is labelled as metadata because that is the whole truth
+    /// about it: its own rules disallow automated downloads, so a badge implying
+    /// the game can be fetched from there would be misleading.
+    /// </remarks>
+    private static string Describe(string sourceKey) => sourceKey switch
+    {
+        InternetArchiveCatalogSource.SourceKey => "Archive.org",
+        MyAbandonwareCatalogSource.SourceKey => "MyAbandonware metadata",
+        _ => sourceKey
+    };
 }
