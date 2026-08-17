@@ -44,34 +44,6 @@ configured, and nothing in the launcher blocks on the network.
   not enough, a manifest can pipe the payload through a program you nominate.
   [Full contract](docs/sourcing-adapters.md).
 
-### Deliberately out of scope
-
-- No scraping, parsing or bespoke integration for any game repack, crack or
-  warez distribution site. The two supported sources are an archive with a
-  documented public API and a metadata site whose own `robots.txt` is honoured;
-  everywhere else, you supply a URL that already points at a file.
-- **No scripting engine.** A custom feed's `transform` runs a program you already
-  have, as a child process with a pipe on each end. Nothing is embedded, so no
-  manifest ever executes code inside the launcher.
-- No bundled torrent client. Torrents and magnet links work only if you have
-  aria2c installed and switch it on; the launcher shells out to it and never
-  ships one. With aria2 off, every download is plain HTTP.
-- **No aria2 daemon.** Each transfer gets its own aria2c, which opens a JSON-RPC
-  interface on a loopback port with a fresh secret while it runs — that is where
-  live speed, size and peer/seed counts come from — and exits when the transfer
-  ends. Nothing listens while nothing is downloading.
-- **Nothing is imported or fetched from a path a site's `robots.txt` disallows.**
-  MyAbandonware disallows its download paths, so that source contributes titles,
-  genres and screenshots only — never anything to download. Custom feeds pass
-  through the same check: a manifest is your instruction to this launcher, not a
-  dispensation from the site's.
-- **No memory writing, process modification or DLL injection.** Memory
-  achievements are read-only inspection: only `OpenProcess`,
-  `ReadProcessMemory` and `CloseHandle` are imported anywhere in the project, and
-  the process handle is opened without write rights.
-
----
-
 ## Layout
 
 ```
