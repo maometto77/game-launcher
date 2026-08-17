@@ -74,6 +74,23 @@ public sealed class TestAppHost : IDisposable
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
         services.AddGameLauncher(paths, new StartupOptions());
 
+        // The real UiDispatcher binds to Application.Current.Dispatcher at
+        // construction, and Application.Current is process-wide: once WpfTestHost
+        // has created one, every container built afterwards — including this one,
+        // in a collection with no interface at all — marshals onto a dispatcher
+        // owned by a different fixture.
+        //
+        // That coupling is what wedged the run. SettingsService.SaveAsync awaits
+        // its dispatcher, so any test touching settings after the WPF collection
+        // had shut its dispatcher down waited for an operation nothing would ever
+        // pump. The test never finished, the runner eventually killed the host,
+        // and it was reported as "Test host process crashed".
+        //
+        // Registered after AddGameLauncher so it replaces the real one, and
+        // before the caller's hook so a test that genuinely wants the WPF
+        // dispatcher can still ask for it.
+        services.AddSingleton<IUiDispatcher, ImmediateDispatcher>();
+
         configure?.Invoke(services);
 
         _provider = services.BuildServiceProvider();

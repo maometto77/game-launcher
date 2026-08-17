@@ -1683,3 +1683,87 @@ stashed, where it reproduced (476 passed then aborted, then a clean 493 on the
 next run), so it predates this work. Three consecutive runs on this branch
 passed 529 cleanly. Worth chasing separately; it is a teardown fault rather than
 a failing test.
+
+## 20. The intermittent "test host process crashed"
+
+Roughly one run in three ended with the runner reporting a crashed test host,
+after every test had apparently completed. It was not a crash and it was not in
+the tests.
+
+### 20.1 What it actually was
+
+A hang. The host process sat at ~296 MB with its threads alive; the runner
+eventually gave up and killed it, which is reported as a crash. Two of six
+baseline runs reproduced it, both stopping at 523 of 529 tests.
+
+`--blame-crash` writes a sequence file naming every test and whether it
+completed. Exactly one had not:
+`RelayMigrationTests.Credentials_are_kept_per_relay_and_restored_on_switching_back`.
+
+### 20.2 The chain
+
+1. That test calls `ConfigureRelayAsync`, which calls
+   `SettingsService.SaveAsync`.
+2. `SaveAsync` awaits `IUiDispatcher.InvokeAsync` to raise `SettingsChanged`.
+3. `UiDispatcher` binds to `Application.Current?.Dispatcher` **at
+   construction**, and `Application.Current` is process-wide.
+4. `WpfTestHost` — a collection fixture for the interface tests — creates that
+   `Application` on its own STA thread.
+5. So every container built after the interface collection started, *including
+   containers in collections with no interface at all*, marshalled onto a
+   dispatcher owned by a different fixture.
+6. When the interface collection finished, xunit disposed its fixture and shut
+   that dispatcher down. Any later test that saved settings queued an operation
+   nothing would ever pump, and never returned.
+
+The intermittency is test ordering: whether the relay tests happened to run
+before or after the interface collection's fixture was disposed.
+
+### 20.3 Two fixes, at different levels
+
+**The test host no longer borrows a dispatcher.** `TestAppHost` now registers
+`ImmediateDispatcher`, so a container built for a unit test runs the hop inline
+instead of marshalling onto a thread another fixture owns. The `configure` hook
+still lets a test ask for something else.
+
+**`UiDispatcher` no longer queues to a dispatcher that has stopped.** When
+`HasShutdownStarted` or `HasShutdownFinished` is set, the action runs on the
+calling thread. This is a production fix as much as a test one: a hosted service
+saving its state during shutdown raises `SettingsChanged` through here, and
+queueing that to a dispatcher already shutting down means application exit
+waiting on itself. Running inline is safe precisely because there is no longer
+any interface for the handler to touch.
+
+### 20.4 Two guards so the next one is diagnosable
+
+`WpfTestHost` now handles `DispatcherUnhandledException`. It had none: `App`
+attaches its handler in `OnStartup`, which the test host deliberately never
+runs, so any exception during a layout pass would have taken the process down
+with no attribution at all. It is now recorded and marked handled, and surfaces
+through whichever `Invoke` is in progress.
+
+`TestProcessDiagnostics` records `AppDomain.UnhandledException` and
+`TaskScheduler.UnobservedTaskException` to a file beside the test binaries. A
+test that throws gets a name and a stack from the runner; a background thread
+that throws gets neither, and that asymmetry is what made this take as long as
+it did.
+
+### 20.5 Verified
+
+| | Aborted runs |
+|---|---|
+| Before | 2 of 6 |
+| After | 0 of 18 |
+
+Both regression tests were confirmed against the reverted fix: with the shutdown
+guard removed, `A_dispatcher_that_has_shut_down_runs_the_work_rather_than_queueing_it`
+and `The_synchronous_path_survives_shutdown_too` both fail.
+
+### 20.6 Not the causes
+
+Ruled out on the way, and worth recording so they are not re-investigated: the
+`FileSystemWatcher` instances in the achievement scheduler and watcher are all
+disposed and none run past teardown; the three `async void` handlers in the view
+code all carry blanket try/catch already; and no foreground thread is created
+anywhere — the only explicit `Thread` in the codebase is the interface test
+host's, and it is a background thread.
