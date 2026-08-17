@@ -86,3 +86,16 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+# Deployment secrets and generated artefacts.
+deploy/.env
+deploy/.env.bak.*
+deploy/installer/output/
+
+# Bundled external tools are chosen and verified per build, not committed. The
+# folder's README is, so the contract stays visible.
+GameLauncher.Desktop/tools/win-x64/*
+!GameLauncher.Desktop/tools/win-x64/.gitkeep
+
+# Faults recorded by the test host when a background thread dies.
+**/test-process-faults.log

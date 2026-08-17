@@ -17,6 +17,32 @@
     <RootNamespace>GameLauncher.Desktop</RootNamespace>
     <AssemblyName>GameLauncher.Desktop</AssemblyName>
     <Description>Steam-style game launcher desktop client.</Description>
+
+    <!--
+      Version stamped into the executable and shown at the foot of the sidebar.
+      Kept here rather than in the publish profile so a plain build reports the
+      same number a published one does.
+    -->
+    <Version>1.0.0</Version>
+    <Company>GameLauncher</Company>
+    <Product>GameLauncher</Product>
+
+    <!--
+      Trimming is deliberately OFF, and this is the one production-build setting
+      worth explaining rather than just setting.
+
+      WPF is not trim-compatible and Microsoft does not support it: XAML resolves
+      types by name at run time, and the linker cannot see those references. A
+      trimmed WPF build links, publishes, and then fails when some style, control
+      template or converter is first realised — which is to say after shipping,
+      on a screen no test opened. The saving is not worth a class of failure that
+      only appears in the field.
+
+      Single-file and compression are safe and are enabled in the publish
+      profile, where they belong: they change how the output is packaged, not
+      what is in it.
+    -->
+    <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,6 +68,47 @@
     -->
     <InternalsVisibleTo Include="GameLauncher.Tests" />
   </ItemGroup>
+
+  <!--
+    External programs the launcher shells out to, bundled if they are present.
+
+    Drop an executable into tools\win-x64\ and it is copied to tools\ beside the
+    published application, where ExternalToolLocator looks before it falls back
+    to PATH. Nothing here downloads anything: the folder is empty in the
+    repository, the build succeeds without it, and a launcher that silently
+    fetched and ran an executable would be doing the most abusable thing a
+    desktop application can do.
+
+    Today that means aria2c.exe, which buys multi-connection downloads and
+    BitTorrent. Ludusavi is deliberately absent — this launcher reads the
+    community manifest directly and never runs the program, so shipping the
+    binary would be dead weight.
+  -->
+  <ItemGroup>
+    <None Include="tools\win-x64\**\*" Condition="Exists('tools\win-x64')">
+      <Link>tools\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="ReportBundledTools" AfterTargets="Build">
+    <ItemGroup>
+      <BundledTool Include="tools\win-x64\*" Condition="Exists('tools\win-x64')" />
+    </ItemGroup>
+
+    <Message Importance="normal"
+             Condition="'@(BundledTool)' != ''"
+             Text="Bundling external tools: @(BundledTool->'%(Filename)%(Extension)', ', ')" />
+
+    <!--
+      Said once, at normal verbosity, so a release build does not quietly ship
+      without the tool someone assumed was in it.
+    -->
+    <Message Importance="normal"
+             Condition="'@(BundledTool)' == '' AND '$(Configuration)' == 'Release'"
+             Text="No external tools bundled. aria2c is optional; without it, torrents are unavailable and downloads use the built-in engine. See tools/README.md." />
+  </Target>
 
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.7.1" />

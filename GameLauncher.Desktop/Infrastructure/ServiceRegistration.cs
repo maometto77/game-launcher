@@ -79,6 +79,12 @@ public static class ServiceRegistration
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<IWindowService, WindowService>();
 
+        // Finds the external programs the launcher shells out to: bundled
+        // beside the executable, dropped into a tools folder, or already on
+        // PATH. It resolves and never installs — nothing here downloads a
+        // program.
+        services.AddSingleton<IExternalToolLocator, ExternalToolLocator>();
+
         services.AddSingleton<IIdentityGenerator, IdentityGenerator>();
         services.AddSingleton<ISettingsService, SettingsService>();
         services.AddSingleton<IThemeService, ThemeService>();

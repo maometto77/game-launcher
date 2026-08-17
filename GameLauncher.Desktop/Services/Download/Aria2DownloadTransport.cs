@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net.Http;
 using System.Net.Sockets;
+using GameLauncher.Desktop.Infrastructure;
 using GameLauncher.Desktop.Services.Settings;
 using Microsoft.Extensions.Logging;
 
@@ -50,9 +51,6 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// <summary>How often progress is sampled.</summary>
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(500);
 
-    /// <summary>How long to wait for <c>aria2c --version</c> before giving up on it.</summary>
-    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(5);
-
     /// <summary>How long to let aria2 shut itself down before it is killed.</summary>
     private static readonly TimeSpan ShutdownGrace = TimeSpan.FromSeconds(5);
 
@@ -69,10 +67,9 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     private static readonly TimeSpan RpcGrace = TimeSpan.FromSeconds(5);
 
     private readonly ISettingsService _settings;
+    private readonly IExternalToolLocator _tools;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<Aria2DownloadTransport> _logger;
-
-    private readonly SemaphoreSlim _probeGate = new(1, 1);
 
     /// <summary>Every aria2c this transport has started and not yet seen exit.</summary>
     /// <remarks>
@@ -84,23 +81,24 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// </remarks>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Process, byte> _live = new();
 
-    private string? _resolvedExecutable;
-    private bool _probed;
     private bool _disposed;
 
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
     /// <param name="settings">Supplies whether aria2 is enabled and where it lives.</param>
+    /// <param name="tools">Finds the aria2c executable.</param>
     /// <param name="httpClientFactory">Supplies the client used for RPC calls.</param>
     /// <param name="logger">Logger for transfer diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public Aria2DownloadTransport(
         ISettingsService settings,
+        IExternalToolLocator tools,
         IHttpClientFactory httpClientFactory,
         ILogger<Aria2DownloadTransport> logger)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -617,95 +615,18 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     }
 
     /// <summary>
-    /// Finds aria2c, once, and remembers the answer.
+    /// Finds aria2c through the shared tool locator.
     /// </summary>
-    /// <param name="cancellationToken">Cancels the probe.</param>
+    /// <param name="cancellationToken">Cancels the search.</param>
     /// <returns>The executable path, or <see langword="null"/> when it is not usable.</returns>
-    private async Task<string?> ResolveExecutableAsync(CancellationToken cancellationToken)
-    {
-        await _probeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-        try
-        {
-            if (_probed)
-            {
-                return _resolvedExecutable;
-            }
-
-            var configured = _settings.Current.Aria2ExecutablePath;
-
-            var candidate = !string.IsNullOrWhiteSpace(configured)
-                ? configured.Trim()
-                : OperatingSystem.IsWindows() ? "aria2c.exe" : "aria2c";
-
-            _resolvedExecutable = await ProbeAsync(candidate, cancellationToken).ConfigureAwait(false)
-                ? candidate
-                : null;
-
-            _probed = true;
-
-            if (_resolvedExecutable is null)
-            {
-                _logger.LogInformation(
-                    "aria2c was not found ({Candidate}); downloads will use the built-in engine.", candidate);
-            }
-
-            return _resolvedExecutable;
-        }
-        finally
-        {
-            _probeGate.Release();
-        }
-    }
-
-    /// <summary>Runs <c>--version</c> to confirm a candidate actually works.</summary>
-    /// <param name="executable">Path or command to try.</param>
-    /// <param name="cancellationToken">Cancels the probe.</param>
-    /// <returns><see langword="true"/> when it ran successfully.</returns>
-    private async Task<bool> ProbeAsync(string executable, CancellationToken cancellationToken)
-    {
-        try
-        {
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo(executable, "--version")
-                {
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            if (!process.Start())
-            {
-                return false;
-            }
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(ProbeTimeout);
-
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                TryKill(process);
-                return false;
-            }
-
-            return process.ExitCode == 0;
-        }
-        catch (Exception ex)
-        {
-            // A missing binary throws Win32Exception; anything else here means it
-            // is not usable either. Neither is an error worth surfacing — it just
-            // means the fallback engine runs.
-            _logger.LogDebug(ex, "Probing {Executable} failed.", executable);
-            return false;
-        }
-    }
+    /// <remarks>
+    /// The locator looks beside the executable, in the bundled tools folder, in
+    /// the per-user tools folder and finally on PATH, so a copy shipped with the
+    /// installer is found without anyone configuring anything — and one the user
+    /// installed themselves still is.
+    /// </remarks>
+    private Task<string?> ResolveExecutableAsync(CancellationToken cancellationToken) =>
+        _tools.LocateAsync("aria2c", _settings.Current.Aria2ExecutablePath, cancellationToken);
 
     /// <summary>Lists the entries currently in a directory.</summary>
     /// <param name="directory">The directory to list.</param>
@@ -758,7 +679,6 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
         }
 
         _live.Clear();
-        _probeGate.Dispose();
     }
 
     /// <summary>Kills a process, ignoring failure.</summary>

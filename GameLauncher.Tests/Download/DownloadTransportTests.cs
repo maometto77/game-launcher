@@ -1,3 +1,4 @@
+using GameLauncher.Desktop.Infrastructure;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Settings;
@@ -168,6 +169,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             settings,
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
@@ -193,6 +195,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             new StubSettings(),
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
@@ -270,6 +273,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             settings,
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
@@ -335,6 +339,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             settings,
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
@@ -391,6 +396,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             settings,
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
@@ -460,6 +466,7 @@ public sealed class DownloadTransportTests
 
         var transport = new Aria2DownloadTransport(
             settings,
+            host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 

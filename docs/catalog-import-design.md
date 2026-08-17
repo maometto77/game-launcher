@@ -1767,3 +1767,98 @@ disposed and none run past teardown; the three `async void` handlers in the view
 code all carry blanket try/catch already; and no foreground thread is created
 anywhere — the only explicit `Thread` in the codebase is the interface test
 host's, and it is a background thread.
+
+## 21. Packaging and deployment
+
+### 21.1 The trimming question, settled
+
+The publish profile enables single-file, compression and ReadyToRun, and leaves
+`PublishTrimmed` off. That is the one setting here worth arguing rather than
+just setting.
+
+WPF is not trim-compatible and Microsoft does not support it: XAML resolves
+types by name at run time and the linker cannot see those references. A trimmed
+build links, publishes, and then throws when some style, template or converter
+is first realised — which is to say after shipping, on a screen no test opened.
+The saving is not worth a class of failure that only appears in the field.
+
+Result: one 78 MB `GameLauncher.Desktop.exe` that runs with no .NET installed.
+Verified by publishing it and running it against a throwaway `--state-dir`: it
+starts, migrates the schema to version 8, initialises the achievement watcher
+and navigates to the home page with nothing above debug level in the log.
+
+`AllowedReferenceRelatedFileExtensions` is set to none, because otherwise the
+referenced projects' `.pdb` and `.xml` land beside the executable and "single
+file" stops being true.
+
+### 21.2 Tools are located, never installed
+
+`IExternalToolLocator` searches, in order: the configured path, beside the
+executable, `tools/` beside it, the per-user tools folder, then `PATH`. Each
+candidate is run with `--version` before it is accepted, because a file existing
+is not the same as a file working — a zero-byte placeholder, a copy for the
+wrong architecture and something quarantined by security software all pass an
+existence check and fail to start.
+
+Anything dropped into `GameLauncher.Desktop/tools/win-x64/` is bundled by the
+build. The folder is empty in the repository and the build succeeds without it.
+
+**Nothing downloads a binary, at build time or at run time.** A launcher that
+silently fetched an executable and ran it would be doing the single most
+abusable thing a desktop application can do, and that the binary in question is
+well known does not change what the mechanism is. Bundling at build time, with a
+checksum the developer verifies once, covers the same ground with none of that.
+
+Ludusavi is deliberately not bundled: this launcher reads the community manifest
+directly and never runs the program, so the binary would be dead weight. The
+locator is generic, so if that ever changes it is a folder and a string.
+
+### 21.3 The relay behind a proxy
+
+`UseForwardedHeaders` was missing and is now in place. Behind Caddy the relay
+sees plain HTTP from a loopback address; without this it believes that literally,
+which makes any absolute URL it generates wrong and every request appear to come
+from the same machine.
+
+The Compose file deliberately does not publish the relay's port. It is reachable
+only from the proxy on the internal network, so nothing can bypass TLS by
+hitting 8080 directly.
+
+Caddy rather than Nginx: the entire TLS story is two lines and a certificate it
+obtains and renews itself, against certbot plus a renewal timer plus a reload
+hook for a single-service deployment.
+
+`deploy-vps.sh` checks DNS before it starts, because a failed certificate
+request counts against the Let's Encrypt rate limit and five of them locks the
+name out for an hour. It verifies through the public name over TLS at the end,
+which is the only check that proves DNS, the certificate, the proxy and the
+relay all work together.
+
+The systemd unit uses `Type=simple`, not `Type=notify`: notify requires
+`Microsoft.Extensions.Hosting.Systemd` and a `UseSystemd()` call the relay does
+not have, and systemd would wait for a readiness signal that never arrives and
+then kill it as failed.
+
+### 21.4 What the deployment does not include
+
+Two things the brief asks for do not exist in the relay and are not stubbed:
+
+1. **Cloud save synchronisation.** There are no save endpoints. This is not a
+   deployment task — it needs blob storage, a conflict policy for two machines
+   that both played offline, and a decision about client-side encryption,
+   because a save file is the one thing a user cannot re-download. An endpoint
+   that pretended to do this would be worse than none.
+2. **A manifest feed index.** Sourcing feeds are client-side by design: a
+   manifest in the adapter directory is read by the launcher with no server
+   involved. Centralising it would be a design change, not a deployment step.
+
+Both are worth building. They are named so that "the relay is deployed" is not
+mistaken for "cloud saves work".
+
+### 21.5 Verified
+
+Debug and Release: 544 tests, 0 failures, 0 warnings. The published client was
+launched and its log read. `deploy-vps.sh` passes `bash -n`, and the relay
+publishes for `linux-x64` — which is what the Dockerfile does. The image itself
+was **not** built: Docker is not installed on this machine, so the Dockerfile
+and Compose file are unverified beyond review.

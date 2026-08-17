@@ -1,0 +1,26 @@
+# The build context is the repository root, so this matters: without it Docker
+# uploads every bin/ and obj/ folder in the solution, including the WPF client's
+# self-contained publish output, before the first instruction runs.
+
+**/bin/
+**/obj/
+**/TestResults/
+**/.vs/
+**/.vscode/
+**/.idea/
+
+.git/
+.github/
+
+# The desktop client is not part of the relay image and cannot build in Linux
+# anyway — it targets net8.0-windows.
+GameLauncher.Desktop/
+GameLauncher.Tests/
+
+docs/
+deploy/.env
+deploy/*.bak.*
+
+*.user
+*.suo
+*.log

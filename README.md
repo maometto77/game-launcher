@@ -124,12 +124,24 @@ dotnet build "GameLauncher.sln"
 dotnet test "GameLauncher.Tests/GameLauncher.Tests.csproj"
 ```
 
-Expect **0 warnings, 0 errors** and **493 passing tests**. Warnings are
+Expect **0 warnings, 0 errors** and **544 passing tests**. Warnings are
 meaningful here: CS1591 (missing XML documentation) is deliberately left visible,
 so a non-zero warning count means something regressed.
 
 The test suite includes a real Kestrel server on a loopback port for the download
 path and an in-process relay for the hub tests. Nothing reaches the network.
+
+---
+
+## Ship it
+
+```bash
+dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
+```
+
+One self-contained `GameLauncher.Desktop.exe`, about 78 MB, that runs on Windows
+with no .NET installed. An Inno Setup script and a one-command VPS deployment for
+the optional relay are in [`deploy/`](deploy/README.md).
 
 ---
 
