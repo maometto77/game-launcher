@@ -1,0 +1,104 @@
+<!--
+    Card and badge styles shared by the catalogue grid and the download list.
+
+    Kept in one dictionary rather than inline so a card looks the same wherever
+    it appears, and so the hover behaviour is defined once. Every colour comes
+    from the palette, which is what lets a theme stay a pure dictionary swap.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Cover art is drawn at 2:3, the shape virtually every box art uses. -->
+    <sys:Double x:Key="CardWidth">184</sys:Double>
+    <sys:Double x:Key="CardArtHeight">276</sys:Double>
+
+    <!--
+        A card lifts very slightly under the pointer. The border brightening is
+        what actually reads as interactive; the translation is small on purpose,
+        because a grid of cards that jump about is harder to scan, not easier.
+    -->
+    <Style x:Key="GameCardStyle" TargetType="Border">
+        <Setter Property="Width" Value="{StaticResource CardWidth}" />
+        <Setter Property="Margin" Value="0,0,16,18" />
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <TranslateTransform />
+            </Setter.Value>
+        </Setter>
+
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+
+                <Trigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Y"
+                                             To="-3"
+                                             Duration="0:0:0.12" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+
+                <Trigger.ExitActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.Y"
+                                             To="0"
+                                             Duration="0:0:0.12" />
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.ExitActions>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A neutral pill, used for source names and platforms. -->
+    <Style x:Key="BadgeStyle" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource SurfaceRaisedBrush}" />
+        <Setter Property="CornerRadius" Value="9" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="Margin" Value="0,0,4,4" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!--
+        The save badge is accented rather than neutral: it answers a question the
+        user actually has ("will my progress be found?") and would be lost among
+        the source pills if it looked like one of them.
+    -->
+    <Style x:Key="SaveBadgeStyle" TargetType="Border" BasedOn="{StaticResource BadgeStyle}">
+        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+    </Style>
+
+    <Style x:Key="BadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextStyle}">
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- The row a download occupies in the queue. -->
+    <Style x:Key="DownloadRowStyle" TargetType="Border">
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="Padding" Value="16,13" />
+        <Setter Property="Background" Value="{StaticResource SurfaceBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>

@@ -186,6 +186,76 @@
                     <ItemsControl Margin="0,10,0,0"
                                   ItemTemplate="{StaticResource AchievementRowTemplate}"
                                   ItemsSource="{Binding AchievementItems}" />
+
+                    <!--
+                        Achievements another program recorded, kept in their own
+                        section. These are read from a file on disk rather than
+                        awarded by this launcher, and showing them among the
+                        curated ones would misrepresent where they came from.
+                        Absent entirely when nothing has been observed.
+                    -->
+                    <StackPanel Margin="0,26,0,0"
+                                Visibility="{Binding HasExternalAchievements, Converter={StaticResource BooleanToVisibility}}">
+                        <Grid>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="RECORDED ON THIS PC" />
+                            <TextBlock HorizontalAlignment="Right"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding ExternalAchievementSummary}" />
+                        </Grid>
+
+                        <ItemsControl Margin="0,10,0,0" ItemsSource="{Binding ExternalAchievementItems}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,6"
+                                            Padding="14,11"
+                                            Background="{StaticResource SurfaceBrush}"
+                                            BorderBrush="{StaticResource BorderSubtleBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Style="{StaticResource SubheadingTextStyle}"
+                                                           Text="{Binding Title}"
+                                                           TextTrimming="CharacterEllipsis" />
+
+                                                <TextBlock Margin="0,2,0,0"
+                                                           Style="{StaticResource CaptionTextStyle}"
+                                                           Text="{Binding DetailText}"
+                                                           TextTrimming="CharacterEllipsis" />
+
+                                                <!-- Only for something measurably part-done. -->
+                                                <Grid Margin="0,8,0,0"
+                                                      Visibility="{Binding HasProgress, Converter={StaticResource BooleanToVisibility}}">
+                                                    <ProgressBar Height="5"
+                                                                 Maximum="100"
+                                                                 Minimum="0"
+                                                                 Value="{Binding ProgressPercent, Mode=OneWay}" />
+                                                </Grid>
+
+                                                <TextBlock Margin="0,4,0,0"
+                                                           Style="{StaticResource CaptionTextStyle}"
+                                                           Text="{Binding ProgressText}"
+                                                           Visibility="{Binding HasProgress, Converter={StaticResource BooleanToVisibility}}" />
+                                            </StackPanel>
+
+                                            <Border Grid.Column="1"
+                                                    Margin="12,0,0,0"
+                                                    VerticalAlignment="Top"
+                                                    Style="{StaticResource BadgeStyle}">
+                                                <TextBlock Style="{StaticResource BadgeTextStyle}"
+                                                           Text="{Binding StateLabel}" />
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </StackPanel>
 
                 <!-- Right: statistics and actions -->

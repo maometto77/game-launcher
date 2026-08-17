@@ -1,0 +1,212 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.DiscoverView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1180">
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="Discover" Style="{StaticResource TitleTextStyle}" />
+            <TextBlock Text="Games the launcher knows about, as opposed to games you have installed."
+                       Style="{StaticResource MutedTextStyle}"
+                       Margin="0,4,0,0" />
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,20,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0"
+                     Style="{StaticResource TextBoxStyle}"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=250}" />
+
+            <ComboBox Grid.Column="1"
+                      Width="170"
+                      Margin="10,0,0,0"
+                      ItemsSource="{Binding Genres}"
+                      SelectedItem="{Binding SelectedGenre}"
+                      Style="{StaticResource ComboBoxStyle}" />
+
+            <CheckBox Grid.Column="2"
+                      Margin="14,0,0,0"
+                      VerticalAlignment="Center"
+                      Content="Installable only"
+                      Style="{StaticResource CheckBoxStyle}"
+                      IsChecked="{Binding DownloadableOnly}" />
+
+            <Button Grid.Column="3"
+                    Margin="14,0,0,0"
+                    Content="Clear"
+                    Command="{Binding ClearFiltersCommand}"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+
+            <Button Grid.Column="4"
+                    Margin="10,0,0,0"
+                    Content="Refresh"
+                    Command="{Binding RefreshCatalogCommand}"
+                    Style="{StaticResource SecondaryButtonStyle}" />
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Column="0"
+                       Text="{Binding SummaryText}"
+                       Style="{StaticResource MutedTextStyle}"
+                       VerticalAlignment="Center" />
+
+            <TextBlock Grid.Column="1"
+                       Margin="16,0,0,0"
+                       Text="{Binding StatusMessage}"
+                       Style="{StaticResource MutedTextStyle}"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"
+                       Visibility="{Binding StatusMessage, Converter={StaticResource HasValueToVisibility}}" />
+        </Grid>
+
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding IsCatalogEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <ItemsControl ItemsSource="{Binding ListingsView}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource GameCardStyle}">
+                                <StackPanel>
+                                    <!-- Artwork, drawn at a fixed 2:3 so a grid of
+                                         cards lines up whatever each source supplied. -->
+                                    <Grid Height="{StaticResource CardArtHeight}">
+                                        <Border Background="{StaticResource SurfaceRaisedBrush}"
+                                                CornerRadius="7,7,0,0">
+                                            <TextBlock Text="{Binding Title}"
+                                                       Style="{StaticResource MutedTextStyle}"
+                                                       TextWrapping="Wrap"
+                                                       TextAlignment="Center"
+                                                       Margin="14"
+                                                       VerticalAlignment="Center" />
+                                        </Border>
+
+                                        <Border CornerRadius="7,7,0,0" ClipToBounds="True">
+                                            <Image Source="{Binding CoverPath, Converter={StaticResource PathToImage}}"
+                                                   Stretch="UniformToFill" />
+                                        </Border>
+
+                                        <!-- Save badge sits over the artwork so it is
+                                             visible while scanning, not buried in text. -->
+                                        <Border Style="{StaticResource SaveBadgeStyle}"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
+                                                Margin="8"
+                                                ToolTip="Ludusavi knows where this game keeps its saves."
+                                                Visibility="{Binding HasKnownSaves, Converter={StaticResource BooleanToVisibility}}">
+                                            <TextBlock Text="Saves known"
+                                                       Style="{StaticResource BadgeTextStyle}"
+                                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                                        </Border>
+                                    </Grid>
+
+                                    <StackPanel Margin="11,9,11,11">
+                                        <TextBlock Text="{Binding Title}"
+                                                   Style="{StaticResource SubheadingTextStyle}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Title}" />
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                            <TextBlock Text="{Binding YearText}"
+                                                       Style="{StaticResource CaptionTextStyle}" />
+                                            <TextBlock Text="{Binding Attribution}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       Margin="8,0,0,0"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+
+                                        <!-- Where this game can be found. -->
+                                        <ItemsControl ItemsSource="{Binding SourceBadges}"
+                                                      Margin="0,8,0,0"
+                                                      Visibility="{Binding HasSourceBadges, Converter={StaticResource BooleanToVisibility}}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel Orientation="Horizontal" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource BadgeStyle}">
+                                                        <TextBlock Text="{Binding}"
+                                                                   Style="{StaticResource BadgeTextStyle}" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <Button Content="{Binding ActionText}"
+                                                Margin="0,9,0,0"
+                                                HorizontalAlignment="Stretch"
+                                                Style="{StaticResource PrimaryButtonStyle}"
+                                                IsEnabled="{Binding IsActionEnabled}"
+                                                Command="{Binding DataContext.InstallCommand,
+                                                          RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="460"
+                        Visibility="{Binding IsCatalogEmpty, Converter={StaticResource BooleanToVisibility}}">
+                <TextBlock Text="The catalogue is empty"
+                           Style="{StaticResource HeadingTextStyle}"
+                           HorizontalAlignment="Center" />
+
+                <TextBlock Style="{StaticResource MutedTextStyle}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="0,8,0,0"
+                           Text="Turn discovery on in Settings, then refresh. Nothing is fetched from any source until you ask." />
+
+                <Button Content="Refresh now"
+                        Margin="0,16,0,0"
+                        HorizontalAlignment="Center"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        IsEnabled="{Binding IsDiscoveryEnabled}"
+                        Command="{Binding RefreshCatalogCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <Button Grid.Row="4"
+                Margin="0,14,0,0"
+                HorizontalAlignment="Center"
+                Content="Load more"
+                Style="{StaticResource SecondaryButtonStyle}"
+                Command="{Binding LoadMoreCommand}"
+                Visibility="{Binding HasMore, Converter={StaticResource BooleanToVisibility}}" />
+    </Grid>
+</UserControl>

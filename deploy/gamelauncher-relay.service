@@ -1,0 +1,64 @@
+# systemd unit for running the relay without Docker.
+#
+# For a VPS that already has .NET and a web server, or where Docker is not
+# wanted. The Compose file is the easier path; this exists because "install
+# Docker" is not always an available answer.
+#
+#   sudo dotnet publish GameLauncher.Relay -c Release -o /opt/gamelauncher-relay
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin gamelauncher
+#   sudo mkdir -p /var/lib/gamelauncher-relay
+#   sudo chown gamelauncher:gamelauncher /var/lib/gamelauncher-relay
+#   sudo cp deploy/gamelauncher-relay.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now gamelauncher-relay
+#
+# Still needs a proxy in front of it for TLS. The relay binds to loopback only,
+# so nothing reaches it except through that proxy.
+
+[Unit]
+Description=GameLauncher relay
+Documentation=https://github.com/maometto77/game-launcher
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Not Type=notify. That requires the application to signal readiness through
+# sd_notify, which needs the Microsoft.Extensions.Hosting.Systemd package and a
+# UseSystemd() call the relay does not have — systemd would wait for a signal
+# that never arrives and then kill it as failed to start.
+Type=simple
+User=gamelauncher
+Group=gamelauncher
+
+WorkingDirectory=/opt/gamelauncher-relay
+ExecStart=/usr/bin/dotnet /opt/gamelauncher-relay/GameLauncher.Relay.dll
+
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5080
+Environment=Relay__Database__Provider=Sqlite
+Environment=Relay__Database__ConnectionString=Data Source=/var/lib/gamelauncher-relay/gamelauncher-relay.db
+Environment=DOTNET_PRINT_TELEMETRY_MESSAGE=false
+
+Restart=on-failure
+RestartSec=5
+
+# Hardening. A service reachable from the internet, even through a proxy, should
+# be able to touch as little of the machine as possible.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=false
+
+# The one directory it may write to: the database lives here and nowhere else.
+ReadWritePaths=/var/lib/gamelauncher-relay
+
+[Install]
+WantedBy=multi-user.target

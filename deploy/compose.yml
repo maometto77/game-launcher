@@ -1,0 +1,82 @@
+# Relay, behind Caddy for automatic TLS.
+#
+#   cp .env.example .env      # then edit it
+#   docker compose up -d
+#
+# Caddy is used rather than Nginx because the whole TLS story is two lines of
+# Caddyfile and a certificate it obtains and renews itself. Nginx would mean
+# certbot, a renewal timer, and a reload hook — more moving parts than a
+# single-service deployment earns.
+
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: gamelauncher-relay:latest
+    restart: unless-stopped
+
+    # Deliberately no `ports:`. The relay is reachable only from the proxy on
+    # the internal network, so the forwarded-headers configuration in Program.cs
+    # is the only path in and nothing can bypass TLS by hitting 8080 directly.
+    expose:
+      - "8080"
+
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Relay__Database__Provider: Sqlite
+      Relay__Database__ConnectionString: "Data Source=/data/gamelauncher-relay.db"
+
+      # Only needed if a browser client ever talks to this. The desktop
+      # launcher is not a browser and is unaffected by CORS.
+      Relay__AllowedOrigins__0: ${RELAY_ALLOWED_ORIGIN:-}
+
+    volumes:
+      - relay-data:/data
+
+    networks:
+      - relay-net
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+
+    environment:
+      RELAY_DOMAIN: ${RELAY_DOMAIN:?set RELAY_DOMAIN in .env}
+      RELAY_ACME_EMAIL: ${RELAY_ACME_EMAIL:?set RELAY_ACME_EMAIL in .env}
+
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
+      # Certificates survive a restart. Without this Caddy re-issues on every
+      # `up`, and Let's Encrypt rate-limits that quickly enough to lock the
+      # domain out for a week.
+      - caddy-data:/data
+      - caddy-config:/config
+
+    depends_on:
+      - relay
+
+    networks:
+      - relay-net
+
+networks:
+  relay-net:
+    driver: bridge
+
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,78 @@
+{
+  "created": 1774239392,
+  "d1": "ia601403.us.archive.org",
+  "d2": "ia801403.us.archive.org",
+  "dir": "/5/items/msdos_Oregon_Trail_The_1990",
+  "files": [
+    {
+      "name": "00_coverscreenshot.jpg",
+      "source": "original",
+      "mtime": "1419686693",
+      "size": "89012",
+      "format": "JPEG",
+      "md5": "c8cd5db701f0de132620b9b8f656287a",
+      "crc32": "947b1f22",
+      "sha1": "5915fbff89a57c0c45003d8277649d664ac738e6",
+      "rotation": "0"
+    },
+    {
+      "name": "00_coverscreenshot_thumb.jpg",
+      "source": "derivative",
+      "format": "JPEG Thumb",
+      "original": "00_coverscreenshot.jpg",
+      "mtime": "1419686720",
+      "size": "5640",
+      "md5": "d498c451a3faa93a1b24f2d64e2850f6",
+      "crc32": "d43b6e3e",
+      "sha1": "56e9459aa57fa2f4d2e5bd51579ab0d11e603d73"
+    },
+    {
+      "name": "Oregon_Trail_The_1990.zip",
+      "source": "original",
+      "mtime": "1421223470",
+      "size": "359527",
+      "format": "ZIP",
+      "md5": "4231286c119499dd5b32889dc0208928",
+      "crc32": "1e41d812",
+      "sha1": "4958fb7c3028eaa3e36742afaf35073c0373808e",
+      "filecount": "18"
+    }
+  ],
+  "files_count": 3,
+  "item_last_updated": 1636131919,
+  "item_size": 454179,
+  "metadata": {
+    "identifier": "msdos_Oregon_Trail_The_1990",
+    "collection": [
+      "softwarelibrary_msdos_games",
+      "stream_only",
+      "softwarelibrary_msdos",
+      "softwarelibrary",
+      "softwarelibrary_kids",
+      "emulation"
+    ],
+    "description": "<div>The Oregon Trail is a series of <b>strategy</b> computer games.</div>",
+    "emulator": "dosbox",
+    "emulator_ext": "zip",
+    "emulator_start": "oregont/OREGON.EXE",
+    "mediatype": "software",
+    "scanner": "Internet Archive Python library 0.7.5",
+    "title": "Oregon Trail, The",
+    "year": "1990",
+    "publicdate": "2014-12-26 11:16:03",
+    "uploader": "softwarelibrary@textfiles.com",
+    "addeddate": "2014-12-26 11:16:03",
+    "date": "1990",
+    "creator": "MECC",
+    "access-restricted-item": "true",
+    "mobygames_published_by": "MECC",
+    "mobygames_genre": "Educational, Simulation",
+    "mobygames_developed_by": "MECC",
+    "mobygames_released": "1990",
+    "mobygames_also_for": "Apple II, Macintosh, Windows, Windows 3.x",
+    "subject": ["education", "simulation"],
+    "noarchivetorrent": "true"
+  },
+  "server": "ia801403.us.archive.org",
+  "workable_servers": ["ia801403.us.archive.org", "ia601403.us.archive.org"]
+}

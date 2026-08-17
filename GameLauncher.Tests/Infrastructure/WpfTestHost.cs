@@ -35,6 +35,9 @@ public sealed class WpfTestHost : IDisposable
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _ready = new(false);
 
+    /// <summary>Exceptions the dispatcher caught outside any delegate this host ran.</summary>
+    private readonly List<Exception> _dispatcherFailures = [];
+
     private Dispatcher? _dispatcher;
     private Exception? _startupFailure;
     private bool _disposed;
@@ -91,10 +94,81 @@ public sealed class WpfTestHost : IDisposable
             }
         });
 
+        Rethrow(captured ?? TakeDispatcherFailure());
+    }
+
+    /// <summary>
+    /// Runs asynchronous work on the user interface thread and awaits it from
+    /// the caller's thread.
+    /// </summary>
+    /// <param name="work">The work to run.</param>
+    /// <returns>A task that completes when the work does.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="work"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The host has been disposed.</exception>
+    /// <remarks>
+    /// Separate from <see cref="Invoke"/> because that one blocks the caller
+    /// while the dispatcher runs the delegate. Anything inside it that awaits
+    /// with <c>ConfigureAwait(true)</c> — which is every view model in this
+    /// application — would post its continuation to a dispatcher already
+    /// occupied running the delegate, and deadlock. Awaiting from the caller's
+    /// thread instead leaves the dispatcher free to pump those continuations.
+    /// </remarks>
+    public async Task InvokeAsync(Func<Task> work)
+    {
+        ArgumentNullException.ThrowIfNull(work);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
+        Exception? captured = null;
+
+        await _dispatcher!.InvokeAsync(async () =>
+        {
+            try
+            {
+                await work().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                captured = ex;
+            }
+        }).Task.Unwrap().ConfigureAwait(false);
+
+        Rethrow(captured ?? TakeDispatcherFailure());
+    }
+
+    /// <summary>
+    /// Takes the first fault the dispatcher caught outside a delegate this host
+    /// was running, and forgets the rest.
+    /// </summary>
+    /// <returns>The exception, or <see langword="null"/> when there was none.</returns>
+    /// <remarks>
+    /// Layout does not necessarily run inside the call that triggered it.
+    /// <see cref="Window.Show"/> pumps messages, so the measure pass that expands
+    /// a control template can land in a nested dispatcher operation where no
+    /// caller's try/catch can see it.
+    /// </remarks>
+    private Exception? TakeDispatcherFailure()
+    {
+        lock (_dispatcherFailures)
+        {
+            if (_dispatcherFailures.Count == 0)
+            {
+                return null;
+            }
+
+            var first = _dispatcherFailures[0];
+            _dispatcherFailures.Clear();
+            return first;
+        }
+    }
+
+    /// <summary>Rethrows a captured exception with its original stack intact.</summary>
+    /// <param name="captured">The exception, or <see langword="null"/> to do nothing.</param>
+    private static void Rethrow(Exception? captured)
+    {
         if (captured is not null)
         {
-            // Rethrown with its original stack intact so the failing XAML line is
-            // still identifiable in the test output.
+            // The stack is preserved so the failing XAML line is still
+            // identifiable in the test output.
             ExceptionDispatchInfo.Capture(captured).Throw();
         }
     }
@@ -119,6 +193,27 @@ public sealed class WpfTestHost : IDisposable
             // Loads App.xaml, which is what populates Application.Current.Resources
             // with the theme dictionaries the windows resolve against.
             application.InitializeComponent();
+
+            // Without this, a WPF exception on this thread is fatal to the whole
+            // process. App wires its own DispatcherUnhandledException handler in
+            // OnStartup, and this host deliberately never calls Application.Run,
+            // so in a test run there is no handler at all: a binding that throws
+            // during a layout pass takes the test host down and every result in
+            // flight with it, reported only as "Test host process crashed".
+            //
+            // Marked handled so the dispatcher survives, and recorded so the
+            // fault reaches whichever Invoke is in progress instead of vanishing.
+            application.DispatcherUnhandledException += (_, e) =>
+            {
+                TestProcessDiagnostics.Record("Dispatcher.UnhandledException", e.Exception);
+
+                lock (_dispatcherFailures)
+                {
+                    _dispatcherFailures.Add(e.Exception);
+                }
+
+                e.Handled = true;
+            };
 
             _dispatcher = Dispatcher.CurrentDispatcher;
         }

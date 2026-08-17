@@ -1,0 +1,16 @@
+{
+  "games": [
+    {
+      "title": "Example Game",
+      "url": "https://files.example.org/example-game.zip",
+      "file": "example-game.zip",
+      "size": 2359527,
+      "sha1": "dddddddddddddddddddddddddddddddddddddddd"
+    },
+    {
+      "title": "Example Game (torrent)",
+      "url": "magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567",
+      "title_note": "A magnet URI is recognised automatically and handed to aria2c."
+    }
+  ]
+}

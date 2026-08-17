@@ -24,7 +24,7 @@ namespace GameLauncher.Desktop.Services.Achievements;
 /// and providers opt in to the triggers they can act on.
 /// </para>
 /// </remarks>
-public sealed class AchievementWatcherService : IHostedService, IDisposable
+public sealed class AchievementScheduler : IHostedService, IDisposable
 {
     /// <summary>How often memory-backed achievements are re-checked while a game runs.</summary>
     /// <remarks>
@@ -48,7 +48,7 @@ public sealed class AchievementWatcherService : IHostedService, IDisposable
     private readonly IGameLaunchService _launcher;
     private readonly IAchievementRepository _achievements;
     private readonly IGameRepository _games;
-    private readonly ILogger<AchievementWatcherService> _logger;
+    private readonly ILogger<AchievementScheduler> _logger;
 
     private readonly ConcurrentDictionary<int, GameWatch> _watches = new();
     private CancellationTokenSource? _lifetime;
@@ -63,12 +63,12 @@ public sealed class AchievementWatcherService : IHostedService, IDisposable
     /// <param name="games">Reloads a game after exit so playtime is current.</param>
     /// <param name="logger">Logger for scheduling diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public AchievementWatcherService(
+    public AchievementScheduler(
         IAchievementEngine engine,
         IGameLaunchService launcher,
         IAchievementRepository achievements,
         IGameRepository games,
-        ILogger<AchievementWatcherService> logger)
+        ILogger<AchievementScheduler> logger)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));

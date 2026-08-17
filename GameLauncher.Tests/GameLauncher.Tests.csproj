@@ -36,4 +36,24 @@
     <Using Include="System.IO" />
   </ItemGroup>
 
+  <!--
+    Captured payloads from the real sources. Parsing is tested against what a
+    site actually returned rather than against a hand-written approximation of
+    it, which is the only way these tests notice a source changing shape.
+  -->
+  <ItemGroup>
+    <None Include="Discovery\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    The example manifests shipped in docs, copied here so a test loads the very
+    files a user is told to copy. Documentation that has drifted from the code
+    is worse than none, and this is the only way to notice.
+  -->
+  <ItemGroup>
+    <None Include="..\docs\adapter-examples\**\*"
+          Link="AdapterExamples\%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

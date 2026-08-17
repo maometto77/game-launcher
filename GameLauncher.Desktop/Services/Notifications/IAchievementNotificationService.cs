@@ -5,13 +5,67 @@ namespace GameLauncher.Desktop.Services.Notifications;
 /// <summary>
 /// One achievement waiting to be, or currently being, announced.
 /// </summary>
-/// <param name="Definition">The achievement that was earned.</param>
+/// <param name="Title">The achievement's name.</param>
+/// <param name="Description">What it was earned for.</param>
+/// <param name="IconPath">Its icon, or <see langword="null"/> for the placeholder.</param>
 /// <param name="Game">The game it belongs to, or <see langword="null"/> for a library-wide one.</param>
 /// <param name="UnlockedAt">When it was earned.</param>
+/// <remarks>
+/// Carries what a toast needs rather than the row it came from. Achievements
+/// now arrive by two routes — the catalogue's own providers, and a file some
+/// emulator wrote — and a notification that named an
+/// <see cref="AchievementDefinition"/> could only ever describe the first.
+/// </remarks>
 public sealed record AchievementNotification(
-    AchievementDefinition Definition,
+    string Title,
+    string Description,
+    string? IconPath,
     Game? Game,
-    DateTimeOffset UnlockedAt);
+    DateTimeOffset UnlockedAt)
+{
+    /// <summary>Builds a notification for a catalogue achievement.</summary>
+    /// <param name="definition">The achievement that was earned.</param>
+    /// <param name="game">The game it belongs to.</param>
+    /// <param name="unlockedAt">When it was earned.</param>
+    /// <returns>The notification.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static AchievementNotification FromDefinition(
+        AchievementDefinition definition,
+        Game? game,
+        DateTimeOffset unlockedAt)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        return new AchievementNotification(
+            definition.Title, definition.Description, definition.IconPath, game, unlockedAt);
+    }
+
+    /// <summary>Builds a notification for an achievement read off the disk.</summary>
+    /// <param name="achievement">The achievement that was earned.</param>
+    /// <param name="game">The game it belongs to, if the library has it.</param>
+    /// <param name="sourceName">What to call the writer that recorded it.</param>
+    /// <returns>The notification.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="achievement"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// The API name stands in for a title. These files record identifiers, not
+    /// display names, and inventing a prettier one would mean guessing at what a
+    /// game calls its own achievement.
+    /// </remarks>
+    public static AchievementNotification FromExternal(
+        ExternalAchievement achievement,
+        Game? game,
+        string sourceName)
+    {
+        ArgumentNullException.ThrowIfNull(achievement);
+
+        return new AchievementNotification(
+            achievement.ApiName,
+            $"Recorded by {sourceName}",
+            null,
+            game,
+            achievement.UnlockedAt ?? DateTimeOffset.Now);
+    }
+}
 
 /// <summary>
 /// Describes a change to what is currently being announced.

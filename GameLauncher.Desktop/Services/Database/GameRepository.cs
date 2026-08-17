@@ -25,7 +25,7 @@ namespace GameLauncher.Desktop.Services.Database;
 public sealed class GameRepository : IGameRepository
 {
     private const string SelectColumns = """
-        SELECT Id, GlobalKey, CatalogId, Title, CoverArtPath, HeroArtPath, ExecutablePath, InstallDir,
+        SELECT Id, GlobalKey, CatalogId, ListingId, SteamAppId, Title, CoverArtPath, HeroArtPath, ExecutablePath, InstallDir,
                InstallSizeBytes, PlaytimeSeconds, LastPlayedAt, DateAdded, Tags,
                CollectionId, Notes, SourceUrl, UpdatedAt
         FROM   Game
@@ -150,12 +150,12 @@ public sealed class GameRepository : IGameRepository
         var id = await connection.ExecuteScalarAsync<long>(
             new CommandDefinition(
                 """
-                INSERT INTO Game (GlobalKey, CatalogId, Title, CoverArtPath, HeroArtPath, ExecutablePath,
-                                  InstallDir, InstallSizeBytes, PlaytimeSeconds, LastPlayedAt, DateAdded,
-                                  Tags, CollectionId, Notes, SourceUrl, UpdatedAt)
-                VALUES (@GlobalKey, @CatalogId, @Title, @CoverArtPath, @HeroArtPath, @ExecutablePath,
-                        @InstallDir, @InstallSizeBytes, @PlaytimeSeconds, @LastPlayedAt, @DateAdded,
-                        @Tags, @CollectionId, @Notes, @SourceUrl, @UpdatedAt);
+                INSERT INTO Game (GlobalKey, CatalogId, ListingId, SteamAppId, Title, CoverArtPath, HeroArtPath,
+                                  ExecutablePath, InstallDir, InstallSizeBytes, PlaytimeSeconds,
+                                  LastPlayedAt, DateAdded, Tags, CollectionId, Notes, SourceUrl, UpdatedAt)
+                VALUES (@GlobalKey, @CatalogId, @ListingId, @SteamAppId, @Title, @CoverArtPath, @HeroArtPath,
+                        @ExecutablePath, @InstallDir, @InstallSizeBytes, @PlaytimeSeconds,
+                        @LastPlayedAt, @DateAdded, @Tags, @CollectionId, @Notes, @SourceUrl, @UpdatedAt);
 
                 SELECT last_insert_rowid();
                 """,
@@ -183,6 +183,8 @@ public sealed class GameRepository : IGameRepository
                 """
                 UPDATE Game
                 SET    CatalogId        = @CatalogId,
+                       ListingId        = @ListingId,
+                       SteamAppId       = @SteamAppId,
                        Title            = @Title,
                        CoverArtPath     = @CoverArtPath,
                        HeroArtPath      = @HeroArtPath,
@@ -314,6 +316,8 @@ public sealed class GameRepository : IGameRepository
 
         parameters.Add(nameof(Game.GlobalKey), game.GlobalKey);
         parameters.Add(nameof(Game.CatalogId), game.CatalogId);
+        parameters.Add(nameof(Game.ListingId), game.ListingId);
+        parameters.Add(nameof(Game.SteamAppId), game.SteamAppId);
         parameters.Add(nameof(Game.UpdatedAt), game.UpdatedAt);
         parameters.Add(nameof(Game.Title), game.Title);
         parameters.Add(nameof(Game.CoverArtPath), game.CoverArtPath);

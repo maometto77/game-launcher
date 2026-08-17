@@ -42,6 +42,22 @@ public interface INavigationService
     event EventHandler<ViewModelBase?>? CurrentChanged;
 
     /// <summary>
+    /// Navigates to a page, reusing the same instance every time.
+    /// </summary>
+    /// <typeparam name="TViewModel">The page to show.</typeparam>
+    /// <param name="cancellationToken">Cancels the navigation and the page's load.</param>
+    /// <returns>A task that completes once the page has loaded.</returns>
+    /// <remarks>
+    /// For pages reached from the sidebar, where losing state on every visit
+    /// would be felt: a search box that empties itself, a filter that resets,
+    /// a scroll position that jumps back to the top. The page still gets
+    /// <c>OnNavigatedToAsync</c> each time, so it can refresh what should be
+    /// fresh while keeping what should not.
+    /// </remarks>
+    Task NavigateToKeptAliveAsync<TViewModel>(CancellationToken cancellationToken = default)
+        where TViewModel : ViewModelBase;
+
+    /// <summary>
     /// Navigates to a view model resolved from the container.
     /// </summary>
     /// <typeparam name="TViewModel">The view model type to display.</typeparam>
@@ -75,8 +91,9 @@ public interface INavigationService
     /// Discards the back stack, so the next <see cref="GoBackAsync"/> is a no-op.
     /// </summary>
     /// <remarks>
-    /// Used when switching top-level sections: returning from Library to a game
-    /// page the user visited before opening Settings would be disorienting.
+    /// Used when the shell moves sideways — a different section, or a different
+    /// tab within one. Returning from Downloads to a game page the user opened
+    /// out of the library some minutes ago would be disorienting.
     /// </remarks>
     void ClearHistory();
 }

@@ -1,0 +1,105 @@
+; Inno Setup script for the desktop client.
+;
+; Publish first, then compile this:
+;
+;   dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
+;   iscc deploy\installer\GameLauncher.iss
+;
+; Produces deploy\installer\output\GameLauncher-Setup-<version>.exe.
+;
+; The published output is a single self-contained executable plus whatever is in
+; tools\, so this installs a handful of files rather than a runtime.
+
+#define AppName        "GameLauncher"
+#define AppVersion     "1.0.0"
+#define AppPublisher   "GameLauncher"
+#define AppExeName     "GameLauncher.Desktop.exe"
+#define PublishDir     "..\..\GameLauncher.Desktop\bin\publish\win-x64"
+
+[Setup]
+AppId={{8F3B6A21-9C4D-4E7A-B2F1-6D5C0E93A748}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
+VersionInfoVersion={#AppVersion}
+
+DefaultDirName={autopf}\{#AppName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+DisableDirPage=no
+
+; Per-machine when run elevated, per-user when not. A launcher is a personal
+; application and should not demand an administrator to install.
+PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=lowest
+
+OutputDir=output
+OutputBaseFilename=GameLauncher-Setup-{#AppVersion}
+Compression=lzma2/max
+SolidCompression=yes
+
+; The published executable is already compressed by the single-file bundler, so
+; the installer's own pass gains little on it — but the tools folder and any
+; loose files still benefit.
+WizardStyle=modern
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+
+UninstallDisplayIcon={app}\{#AppExeName}
+LicenseFile=
+SetupIconFile=
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Shortcuts:"
+
+[Files]
+; The whole publish folder. Recursing rather than naming files means a tool
+; dropped into tools\ is installed without editing this script.
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#AppName}";     Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#AppExeName}"; Description: "Start {#AppName}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; The extraction cache the single-file bundler creates on first run. Left
+; behind, it is a few hundred megabytes of nothing after an uninstall.
+Type: filesandordirs; Name: "{localappdata}\Temp\.net\{#AppName}"
+
+[Code]
+{
+  The library is deliberately not removed. It holds the user's games, playtime,
+  collections, achievements and — in settings.json — the only copy of their
+  relay token, which the relay stores as a hash and cannot reissue. An uninstall
+  that silently deleted all of that would be unforgivable, so it is offered and
+  defaults to no.
+}
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: string;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    DataDir := ExpandConstant('{localappdata}\{#AppName}');
+
+    if DirExists(DataDir) then
+    begin
+      if MsgBox('Remove your library as well?' + #13#10#13#10 +
+                'This deletes games, playtime, collections, achievements and your relay ' +
+                'credentials from:' + #13#10 + DataDir + #13#10#13#10 +
+                'Your relay token cannot be recovered afterwards. Choose No to keep everything.',
+                mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      begin
+        DelTree(DataDir, True, True, True);
+      end;
+    end;
+  end;
+end;

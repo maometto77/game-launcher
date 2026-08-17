@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameLauncher.Desktop.Infrastructure;
@@ -19,13 +20,29 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     private readonly INavigationService _navigation;
     private readonly IStartupNotices _notices;
     private readonly ILogger<MainWindowViewModel> _logger;
+
+    /// <summary>The sub-view last open in each section, so returning restores it.</summary>
+    private readonly Dictionary<NavigationSection, string> _lastSubSection = [];
+
+    /// <summary>Set while a section change is assigning the selection itself.</summary>
+    private bool _suppressSubNavigation;
+
     private bool _disposed;
 
     [ObservableProperty]
     private ViewModelBase? _currentPage;
 
     [ObservableProperty]
-    private NavigationSection _activeSection = NavigationSection.Home;
+    private NavigationSection _activeSection = NavigationSection.Library;
+
+    [ObservableProperty]
+    private ObservableCollection<SubNavigationItem> _subSections = [];
+
+    [ObservableProperty]
+    private SubNavigationItem? _selectedSubSection;
+
+    [ObservableProperty]
+    private bool _hasSubSections;
 
     [ObservableProperty]
     private bool _canGoBack;
@@ -69,7 +86,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     /// <returns>A task that completes when the landing page is loaded.</returns>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await NavigateAsync(NavigationSection.Home, cancellationToken).ConfigureAwait(true);
+        await NavigateAsync(NavigationSection.Library, cancellationToken).ConfigureAwait(true);
 
         // Shown after the first page rather than before it, so the banner appears
         // over a working window instead of an empty shell. Startup produces
@@ -109,8 +126,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Navigates to <paramref name="section"/>, mapping it to the owning view
-    /// model type.
+    /// Shows a top-level section, reopening whichever sub-view was last active
+    /// inside it.
     /// </summary>
     /// <param name="section">Section to display.</param>
     /// <param name="cancellationToken">Cancels the load.</param>
@@ -127,46 +144,147 @@ public sealed partial class MainWindowViewModel : ViewModelBase, IDisposable
         // page the user left three sections ago is not what Back means to them.
         _navigation.ClearHistory();
 
+        var tabs = BuildSubSections(section);
+
+        // Remembered per section, so leaving Library on Achievements and coming
+        // back does not silently drop the user somewhere else.
+        var remembered = _lastSubSection.GetValueOrDefault(section);
+
+        var target = tabs.FirstOrDefault(tab => string.Equals(tab.Key, remembered, StringComparison.Ordinal))
+                     ?? tabs.FirstOrDefault();
+
         try
         {
-            switch (section)
+            if (target is null)
             {
-                case NavigationSection.Home:
-                    await _navigation.NavigateToAsync<HomeViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case NavigationSection.Library:
-                    await _navigation.NavigateToAsync<LibraryViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case NavigationSection.Friends:
-                    await _navigation.NavigateToAsync<FriendsViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case NavigationSection.Collections:
-                    await _navigation.NavigateToAsync<CollectionsViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case NavigationSection.Achievements:
-                    await _navigation.NavigateToAsync<AchievementsViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                case NavigationSection.Settings:
-                    await _navigation.NavigateToAsync<SettingsViewModel>(cancellationToken).ConfigureAwait(true);
-                    break;
-
-                default:
-                    // Unreachable: the sidebar only offers sections that are mapped.
-                    throw new ArgumentOutOfRangeException(
-                        nameof(section), section, "No view model is mapped to this navigation section.");
+                // Unreachable: the sidebar only offers sections that are mapped.
+                throw new ArgumentOutOfRangeException(
+                    nameof(section), section, "No view model is mapped to this navigation section.");
             }
 
+            await target.ActivateAsync(cancellationToken).ConfigureAwait(true);
+
             ActiveSection = section;
+            SubSections = new ObservableCollection<SubNavigationItem>(tabs);
+
+            // Assigned after the collection, so the selector is choosing from the
+            // list it is about to display rather than the outgoing section's, and
+            // suppressed so the assignment does not navigate a second time.
+            _suppressSubNavigation = true;
+            SelectedSubSection = target;
+            _suppressSubNavigation = false;
+
+            HasSubSections = tabs.Count > 1;
+            _lastSubSection[section] = target.Key;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Navigating to {Section} failed.", section);
             SetErrorMessage($"Could not open {section}.");
+        }
+    }
+
+    /// <summary>
+    /// Lists the sub-views a section offers, in the order they appear.
+    /// </summary>
+    /// <param name="section">The section being shown.</param>
+    /// <returns>Its sub-views; empty for a section with nothing mapped.</returns>
+    /// <remarks>
+    /// Every page is kept alive, so returning to one finds its filters, search
+    /// text and scroll position as they were left. Sections with a single entry
+    /// still return it — the view hides the strip rather than drawing one tab.
+    /// </remarks>
+    private IReadOnlyList<SubNavigationItem> BuildSubSections(NavigationSection section) => section switch
+    {
+        NavigationSection.Library =>
+        [
+            Tab("overview", "Overview", token => _navigation.NavigateToKeptAliveAsync<HomeViewModel>(token)),
+            Tab("games", "Installed games", token => _navigation.NavigateToKeptAliveAsync<LibraryViewModel>(token)),
+            Tab("collections", "Collections",
+                token => _navigation.NavigateToKeptAliveAsync<CollectionsViewModel>(token)),
+            Tab("achievements", "Achievements",
+                token => _navigation.NavigateToKeptAliveAsync<AchievementsViewModel>(token))
+        ],
+
+        // One entry today. A second catalogue browser would sit beside Discover
+        // here rather than claim its own sidebar row.
+        NavigationSection.Search =>
+        [
+            Tab("discover", "Discover", token => _navigation.NavigateToKeptAliveAsync<DiscoverViewModel>(token))
+        ],
+
+        NavigationSection.Downloads =>
+        [
+            Tab("queue", "Queue", token => _navigation.NavigateToKeptAliveAsync<DownloadsViewModel>(token))
+        ],
+
+        NavigationSection.Friends =>
+        [
+            Tab("friends", "Friends", token => _navigation.NavigateToKeptAliveAsync<FriendsViewModel>(token))
+        ],
+
+        NavigationSection.Settings =>
+        [
+            Tab("settings", "Settings", token => _navigation.NavigateToKeptAliveAsync<SettingsViewModel>(token))
+        ],
+
+        _ => []
+    };
+
+    /// <summary>Builds one sub-navigation entry.</summary>
+    /// <param name="key">Stable identifier, used to restore the last choice.</param>
+    /// <param name="label">What the tab says.</param>
+    /// <param name="activate">Shows the sub-view.</param>
+    /// <returns>The entry.</returns>
+    private static SubNavigationItem Tab(string key, string label, Func<CancellationToken, Task> activate) =>
+        new() { Key = key, Label = label, ActivateAsync = activate };
+
+    /// <summary>
+    /// Shows the chosen sub-view when the user picks a tab.
+    /// </summary>
+    /// <param name="value">The newly selected tab.</param>
+    /// <remarks>
+    /// Routed through a command rather than started here, because a
+    /// property-changed handler cannot be asynchronous. The command owns the
+    /// in-flight task, so the navigation is observable instead of forgotten.
+    /// </remarks>
+    partial void OnSelectedSubSectionChanged(SubNavigationItem? value)
+    {
+        if (_suppressSubNavigation || value is null)
+        {
+            return;
+        }
+
+        _lastSubSection[ActiveSection] = value.Key;
+
+        SelectSubSectionCommand.Execute(value);
+    }
+
+    /// <summary>Opens a sub-view, reporting failure rather than throwing.</summary>
+    /// <param name="item">The tab to activate.</param>
+    /// <returns>A task that completes once the sub-view has loaded, or failed visibly.</returns>
+    /// <remarks>
+    /// Nothing awaits this on the user's path through the interface, so every
+    /// failure has to be caught here or it would surface as an unhandled
+    /// exception on the dispatcher.
+    /// </remarks>
+    [RelayCommand]
+    private async Task SelectSubSectionAsync(SubNavigationItem item)
+    {
+        ClearError();
+
+        // As with a section change: a drill-down reached from the tab being left
+        // is not somewhere Back should return to once the user has moved on.
+        _navigation.ClearHistory();
+
+        try
+        {
+            await item.ActivateAsync(CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Opening {Tab} failed.", item.Label);
+            SetErrorMessage($"Could not open {item.Label}.");
         }
     }
 

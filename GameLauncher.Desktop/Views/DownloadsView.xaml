@@ -1,0 +1,257 @@
+<UserControl x:Class="GameLauncher.Desktop.Views.DownloadsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
+             d:DataContext="{d:DesignInstance Type=viewModels:DownloadsViewModel}"
+             mc:Ignorable="d"
+             d:DesignHeight="720" d:DesignWidth="1180">
+
+    <Grid Margin="28,24,28,24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Downloads" Style="{StaticResource TitleTextStyle}" />
+                    <TextBlock Text="{Binding SummaryText}"
+                               Style="{StaticResource MutedTextStyle}"
+                               Margin="0,4,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        VerticalAlignment="Bottom"
+                        Content="Clear finished"
+                        Command="{Binding ClearFinishedCommand}"
+                        Style="{StaticResource SecondaryButtonStyle}" />
+            </Grid>
+
+            <!-- Aggregate stats. Fixed-width columns so the numbers do not
+                 shuffle sideways as they change several times a second. -->
+            <Border Margin="0,16,0,0"
+                    Padding="18,12"
+                    Background="{StaticResource SurfaceBrush}"
+                    BorderBrush="{StaticResource BorderSubtleBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="160" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="TOTAL SPEED" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding TotalSpeedText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="QUEUED" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding QueuedCountText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="ESTIMATED COMPLETION" Style="{StaticResource SectionLabelTextStyle}" />
+                        <TextBlock Text="{Binding EstimatedCompletionText}"
+                                   Style="{StaticResource HeadingTextStyle}"
+                                   Margin="0,3,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <Grid Grid.Row="1" Margin="0,20,0,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}, ConverterParameter=Invert}">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Style="{StaticResource DownloadRowStyle}">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Title, phase and controls -->
+                                    <Grid Grid.Row="0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title}"
+                                                       Style="{StaticResource SubheadingTextStyle}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxWidth="520" />
+
+                                            <Border Margin="10,0,0,0"
+                                                    Padding="7,2"
+                                                    VerticalAlignment="Center"
+                                                    Background="{StaticResource SurfaceRaisedBrush}"
+                                                    CornerRadius="3">
+                                                <TextBlock Text="{Binding PhaseText}"
+                                                           Style="{StaticResource CaptionTextStyle}" />
+                                            </Border>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                            <Button Content="▲"
+                                                    Width="30"
+                                                    ToolTip="Move up the queue"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanReorder, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.MoveUpCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="▼"
+                                                    Width="30"
+                                                    Margin="4,0,0,0"
+                                                    ToolTip="Move down the queue"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanReorder, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.MoveDownCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Pause"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanPause, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.PauseCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Resume"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanResume, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.ResumeCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Retry"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanRetry, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.RetryCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Install"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource PrimaryButtonStyle}"
+                                                    Visibility="{Binding CanInstall, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.InstallCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Cancel"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanCancel, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.CancelCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <Button Content="Remove"
+                                                    Margin="8,0,0,0"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Visibility="{Binding CanRemove, Converter={StaticResource BooleanToVisibility}}"
+                                                    Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                    CommandParameter="{Binding}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Progress -->
+                                    <ProgressBar Grid.Row="1"
+                                                 Height="6"
+                                                 Margin="0,10,0,0"
+                                                 Minimum="0"
+                                                 Maximum="100"
+                                                 Value="{Binding Percent, Mode=OneWay}"
+                                                 IsIndeterminate="{Binding IsIndeterminate}" />
+
+                                    <!-- Numbers and detail -->
+                                    <Grid Grid.Row="2" Margin="0,8,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <TextBlock Grid.Column="0"
+                                                   Text="{Binding DetailText}"
+                                                   Style="{StaticResource CaptionTextStyle}"
+                                                   TextTrimming="CharacterEllipsis" />
+
+                                        <!-- Fixed widths and right alignment: these
+                                             values change several times a second, and a
+                                             stack that resizes to fit them makes the whole
+                                             row twitch. -->
+                                        <Grid Grid.Column="1">
+                                            <Grid.ColumnDefinitions>
+                                                <!-- Wide enough for "888 peers · 88 seeds", which is
+                                                     what a healthy torrent reports. -->
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="150" />
+                                                <ColumnDefinition Width="90" />
+                                                <ColumnDefinition Width="110" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding PeersText}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding SizeText}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding SpeedText}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="3"
+                                                       Text="{Binding EtaText}"
+                                                       Style="{StaticResource CaptionTextStyle}"
+                                                       TextAlignment="Right"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="440"
+                        Visibility="{Binding IsEmpty, Converter={StaticResource BooleanToVisibility}}">
+                <TextBlock Text="Nothing downloading"
+                           Style="{StaticResource HeadingTextStyle}"
+                           HorizontalAlignment="Center" />
+
+                <TextBlock Style="{StaticResource MutedTextStyle}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           Margin="0,8,0,0"
+                           Text="Games you install from Discover appear here, with progress, speed and controls to pause or reorder them." />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</UserControl>

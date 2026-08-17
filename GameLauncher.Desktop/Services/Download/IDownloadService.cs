@@ -72,6 +72,22 @@ public sealed record DownloadProgress(
     double BytesPerSecond,
     TimeSpan Elapsed)
 {
+    /// <summary>
+    /// Peers or servers connected, or <see langword="null"/> when the transport
+    /// does not report it.
+    /// </summary>
+    /// <remarks>
+    /// Distinguished from zero, which means connected to none — a torrent that
+    /// has found nobody yet is a thing worth being able to see.
+    /// </remarks>
+    public int? Peers { get; init; }
+
+    /// <summary>
+    /// Seeders connected, or <see langword="null"/> for anything that is not a
+    /// torrent.
+    /// </summary>
+    public int? Seeders { get; init; }
+
     /// <summary>Gets completion as a fraction, or <see langword="null"/> when the total is unknown.</summary>
     public double? Fraction =>
         TotalBytes is > 0 ? Math.Clamp((double)BytesReceived / TotalBytes.Value, 0d, 1d) : null;

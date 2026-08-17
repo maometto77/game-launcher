@@ -42,12 +42,20 @@ public sealed class TestAppHost : IDisposable
     /// <see langword="false"/> to test startup itself — recovery from a damaged
     /// database cannot be exercised by a host that has already failed to open it.
     /// </param>
+    /// <param name="configure">
+    /// Optional hook applied after the real composition, for adding a test double
+    /// to an open set — a fake catalogue source, for instance. Runs last, so it
+    /// can also replace a registration.
+    /// </param>
     /// <remarks>
     /// Reusing a directory is how a launcher restart is simulated: a second
     /// container over the same database, with none of the first one's in-memory
     /// state. Anything that survives is genuinely persisted.
     /// </remarks>
-    public TestAppHost(string? rootDirectory, bool migrate = true)
+    public TestAppHost(
+        string? rootDirectory,
+        bool migrate = true,
+        Action<IServiceCollection>? configure = null)
     {
         _ownsDirectory = rootDirectory is null;
 
@@ -65,6 +73,25 @@ public sealed class TestAppHost : IDisposable
         // do not run, so a no-provider logger factory is registered instead.
         services.AddLogging(builder => builder.SetMinimumLevel(LogLevel.Warning));
         services.AddGameLauncher(paths, new StartupOptions());
+
+        // The real UiDispatcher binds to Application.Current.Dispatcher at
+        // construction, and Application.Current is process-wide: once WpfTestHost
+        // has created one, every container built afterwards — including this one,
+        // in a collection with no interface at all — marshals onto a dispatcher
+        // owned by a different fixture.
+        //
+        // That coupling is what wedged the run. SettingsService.SaveAsync awaits
+        // its dispatcher, so any test touching settings after the WPF collection
+        // had shut its dispatcher down waited for an operation nothing would ever
+        // pump. The test never finished, the runner eventually killed the host,
+        // and it was reported as "Test host process crashed".
+        //
+        // Registered after AddGameLauncher so it replaces the real one, and
+        // before the caller's hook so a test that genuinely wants the WPF
+        // dispatcher can still ask for it.
+        services.AddSingleton<IUiDispatcher, ImmediateDispatcher>();
+
+        configure?.Invoke(services);
 
         _provider = services.BuildServiceProvider();
 

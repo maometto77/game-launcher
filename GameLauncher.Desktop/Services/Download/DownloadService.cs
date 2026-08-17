@@ -1,7 +1,4 @@
-using System.Diagnostics;
-using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -9,21 +6,25 @@ using Microsoft.Extensions.Logging;
 namespace GameLauncher.Desktop.Services.Download;
 
 /// <summary>
-/// Default <see cref="IDownloadService"/>, built on <see cref="HttpClient"/>.
+/// Default <see cref="IDownloadService"/>.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The transfer writes to a <c>.part</c> file and renames it only once the bytes
-/// are complete and any checksum has matched. A file that appears at the final
-/// path is therefore always whole, and an interrupted transfer leaves something
-/// obviously unfinished that a later run can continue.
+/// Owns the rules around a transfer and delegates the transfer itself to an
+/// <see cref="IDownloadTransport"/>. Validating the address, choosing a file
+/// name, verifying the checksum and renaming into place all stay here, in one
+/// implementation, so a second engine cannot quietly get any of them wrong.
 /// </para>
 /// <para>
-/// Resume is attempted with a range request rather than by trusting
-/// <c>Accept-Ranges</c>: some servers advertise it and then ignore it, so the
-/// response status is the only reliable signal. A <c>206</c> continues the file;
-/// a <c>200</c> means the server sent the whole thing regardless, and the partial
-/// file is discarded.
+/// The transfer writes to a <c>.part</c> file and it is renamed only once the
+/// bytes are complete and any checksum has matched. A file that appears at the
+/// final path is therefore always whole, and an interrupted transfer leaves
+/// something obviously unfinished that a later run can continue.
+/// </para>
+/// <para>
+/// Transports are chosen by capability and availability, best priority first, so
+/// an engine that is not installed is simply not selected and the built-in
+/// <see cref="HttpDownloadTransport"/> takes over.
 /// </para>
 /// </remarks>
 public sealed class DownloadService : IDownloadService
@@ -31,21 +32,37 @@ public sealed class DownloadService : IDownloadService
     /// <summary>Name of the configured <see cref="HttpClient"/> used for transfers.</summary>
     public const string HttpClientName = "downloads";
 
+    /// <summary>Read buffer used when hashing a completed file.</summary>
     private const int BufferSize = 128 * 1024;
 
+    private readonly IReadOnlyList<IDownloadTransport> _transports;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<DownloadService> _logger;
 
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
-    /// <param name="httpClientFactory">Supplies the configured transfer client.</param>
+    /// <param name="transports">The engines available to move bytes.</param>
+    /// <param name="httpClientFactory">Supplies the client used to probe for a file name.</param>
     /// <param name="logger">Logger for transfer diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public DownloadService(IHttpClientFactory httpClientFactory, ILogger<DownloadService> logger)
+    /// <exception cref="InvalidOperationException">No transport is registered.</exception>
+    public DownloadService(
+        IEnumerable<IDownloadTransport> transports,
+        IHttpClientFactory httpClientFactory,
+        ILogger<DownloadService> logger)
     {
+        ArgumentNullException.ThrowIfNull(transports);
+
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        _transports = transports.OrderBy(transport => transport.Priority).ToArray();
+
+        if (_transports.Count == 0)
+        {
+            throw new InvalidOperationException("At least one download transport must be registered.");
+        }
     }
 
     /// <inheritdoc />
@@ -55,10 +72,57 @@ public sealed class DownloadService : IDownloadService
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        ValidateUrl(request.Url);
+
+        var payload = ClassifyPayload(request.Url);
+
+        ValidateUrl(request.Url, payload);
 
         Directory.CreateDirectory(request.DestinationDirectory);
 
+        var transports = await SelectTransportsAsync(payload, cancellationToken).ConfigureAwait(false);
+
+        for (var index = 0; index < transports.Count; index++)
+        {
+            var transport = transports[index];
+
+            try
+            {
+                return payload == DownloadPayload.Torrent
+                    ? await DownloadTorrentAsync(request, transport, progress, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await DownloadFileAsync(request, transport, progress, cancellationToken)
+                        .ConfigureAwait(false);
+            }
+            catch (TransportUnavailableException ex) when (index < transports.Count - 1)
+            {
+                // Only ever thrown before anything was transferred, so handing the
+                // same request to the next engine cannot fetch the file twice.
+                // A transport that answered its availability probe and then would
+                // not start is the case this exists for.
+                _logger.LogWarning(
+                    ex, "{Transport} could not start; falling back to the next transport.", transport.Name);
+            }
+        }
+
+        // Unreachable: the loop returns or rethrows on the last candidate, and
+        // SelectTransportsAsync never returns an empty list.
+        throw new InvalidOperationException("No download transport could start.");
+    }
+
+    /// <summary>
+    /// Downloads a single file.
+    /// </summary>
+    /// <param name="request">What to download.</param>
+    /// <param name="transport">The engine to move it with.</param>
+    /// <param name="progress">Optional progress receiver.</param>
+    /// <param name="cancellationToken">Cancels the transfer.</param>
+    /// <returns>Details of the completed download.</returns>
+    private async Task<DownloadResult> DownloadFileAsync(
+        DownloadRequest request,
+        IDownloadTransport transport,
+        IProgress<DownloadProgress>? progress,
+        CancellationToken cancellationToken)
+    {
         var client = _httpClientFactory.CreateClient(HttpClientName);
 
         var fileName = request.FileName is { Length: > 0 }
@@ -68,61 +132,20 @@ public sealed class DownloadService : IDownloadService
         var finalPath = Path.Combine(request.DestinationDirectory, fileName);
         var partPath = finalPath + ".part";
 
-        var existingBytes = request.AllowResume && File.Exists(partPath)
-            ? new FileInfo(partPath).Length
-            : 0;
-
-        using var message = new HttpRequestMessage(HttpMethod.Get, request.Url);
-
-        if (existingBytes > 0)
-        {
-            message.Headers.Range = new RangeHeaderValue(existingBytes, null);
-            _logger.LogInformation(
-                "Resuming {Url} from byte {Offset}.", request.Url, existingBytes);
-        }
-
-        using var response = await client
-            .SendAsync(message, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-
-        response.EnsureSuccessStatusCode();
-
-        // The server ignored the range and is sending the whole file, so the
-        // partial prefix is meaningless and must not be appended to.
-        var resumed = existingBytes > 0 && response.StatusCode == HttpStatusCode.PartialContent;
-
-        if (existingBytes > 0 && !resumed)
-        {
-            _logger.LogInformation(
-                "{Url} does not support resuming; restarting the transfer.", request.Url);
-            existingBytes = 0;
-        }
-
-        var totalBytes = response.Content.Headers.ContentLength is { } length
-            ? length + (resumed ? existingBytes : 0)
-            : (long?)null;
-
-        var transferred = await CopyToFileAsync(
-            response, partPath, resumed, existingBytes, totalBytes, progress, cancellationToken)
-            .ConfigureAwait(false);
-
-        var checksumVerified = false;
-        if (!string.IsNullOrWhiteSpace(request.ExpectedChecksum))
-        {
-            checksumVerified = await VerifyChecksumAsync(
-                partPath, request.ExpectedChecksum, request.ChecksumAlgorithm, cancellationToken)
-                .ConfigureAwait(false);
-
-            if (!checksumVerified)
+        var outcome = await transport.TransferAsync(
+            new TransportRequest
             {
-                // Deleted rather than kept: a corrupt file that stays on disk would
-                // be resumed next time, and resuming corruption never converges.
-                TryDelete(partPath);
+                Url = request.Url,
+                Payload = DownloadPayload.Http,
+                PartPath = partPath,
+                DestinationDirectory = request.DestinationDirectory,
+                AllowResume = request.AllowResume
+            },
+            progress,
+            cancellationToken).ConfigureAwait(false);
 
-                throw new InvalidOperationException(
-                    "The downloaded file did not match the checksum supplied. It has been deleted.");
-            }
-        }
+        var checksumVerified = await VerifyOrDeleteAsync(partPath, request, cancellationToken)
+            .ConfigureAwait(false);
 
         // Rename last, so the final path only ever holds a complete, verified file.
         File.Move(partPath, finalPath, overwrite: true);
@@ -130,113 +153,212 @@ public sealed class DownloadService : IDownloadService
         var finalSize = new FileInfo(finalPath).Length;
 
         _logger.LogInformation(
-            "Downloaded {Url} to {Path} ({Bytes} bytes, resumed={Resumed}, checksum={Checksum}).",
-            request.Url, finalPath, finalSize, resumed, checksumVerified);
+            "Downloaded {Url} to {Path} via {Transport} ({Bytes} bytes, resumed={Resumed}, checksum={Checksum}).",
+            request.Url, finalPath, transport.Name, finalSize, outcome.WasResumed, checksumVerified);
 
-        return new DownloadResult(finalPath, finalSize, transferred, resumed, checksumVerified);
+        return new DownloadResult(
+            finalPath, finalSize, outcome.BytesTransferred, outcome.WasResumed, checksumVerified);
     }
 
     /// <summary>
-    /// Streams the response body to disk, reporting progress as it goes.
+    /// Downloads a BitTorrent payload.
     /// </summary>
-    /// <param name="response">The response whose body is being read.</param>
-    /// <param name="partPath">Path of the in-progress file.</param>
-    /// <param name="append">Whether to append to an existing partial file.</param>
-    /// <param name="startingBytes">Bytes already present when appending.</param>
-    /// <param name="totalBytes">Expected final size, if known.</param>
+    /// <param name="request">What to download.</param>
+    /// <param name="transport">The engine to move it with.</param>
     /// <param name="progress">Optional progress receiver.</param>
     /// <param name="cancellationToken">Cancels the transfer.</param>
-    /// <returns>The number of bytes pulled over the network.</returns>
-    private static async Task<long> CopyToFileAsync(
-        HttpResponseMessage response,
-        string partPath,
-        bool append,
-        long startingBytes,
-        long? totalBytes,
+    /// <returns>Details of the completed download.</returns>
+    /// <remarks>
+    /// A torrent names its own contents and may produce a directory, so there is
+    /// no file name to negotiate and nothing to rename — the transport reports
+    /// where the payload landed. BitTorrent verifies every piece against the
+    /// metadata as it downloads, so a supplied checksum is a second opinion
+    /// rather than the only one; it is still honoured for a single file.
+    /// </remarks>
+    private async Task<DownloadResult> DownloadTorrentAsync(
+        DownloadRequest request,
+        IDownloadTransport transport,
         IProgress<DownloadProgress>? progress,
         CancellationToken cancellationToken)
     {
-        await using var source = await response.Content
-            .ReadAsStreamAsync(cancellationToken)
+        var outcome = await transport.TransferAsync(
+            new TransportRequest
+            {
+                Url = request.Url,
+                Payload = DownloadPayload.Torrent,
+                PartPath = Path.Combine(request.DestinationDirectory, "torrent.part"),
+                DestinationDirectory = request.DestinationDirectory,
+                AllowResume = request.AllowResume
+            },
+            progress,
+            cancellationToken).ConfigureAwait(false);
+
+        var checksumVerified = false;
+
+        if (!outcome.IsDirectory)
+        {
+            checksumVerified = await VerifyOrDeleteAsync(outcome.ProducedPath, request, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var size = outcome.IsDirectory
+            ? DirectorySize(outcome.ProducedPath)
+            : new FileInfo(outcome.ProducedPath).Length;
+
+        _logger.LogInformation(
+            "Fetched torrent {Url} to {Path} via {Transport} ({Bytes} bytes).",
+            request.Url, outcome.ProducedPath, transport.Name, size);
+
+        return new DownloadResult(
+            outcome.ProducedPath, size, outcome.BytesTransferred, outcome.WasResumed, checksumVerified);
+    }
+
+    /// <summary>
+    /// Verifies a downloaded file, deleting it when it does not match.
+    /// </summary>
+    /// <param name="path">The file to check.</param>
+    /// <param name="request">The request carrying the expected digest.</param>
+    /// <param name="cancellationToken">Cancels hashing.</param>
+    /// <returns><see langword="true"/> when a checksum was supplied and matched.</returns>
+    /// <exception cref="InvalidOperationException">The checksum did not match.</exception>
+    private async Task<bool> VerifyOrDeleteAsync(
+        string path,
+        DownloadRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.ExpectedChecksum))
+        {
+            return false;
+        }
+
+        var verified = await VerifyChecksumAsync(
+            path, request.ExpectedChecksum, request.ChecksumAlgorithm, cancellationToken)
             .ConfigureAwait(false);
 
-        await using var destination = new FileStream(
-            partPath,
-            append ? FileMode.Append : FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            BufferSize,
-            useAsync: true);
-
-        var buffer = new byte[BufferSize];
-        var stopwatch = Stopwatch.StartNew();
-
-        long transferred = 0;
-        var lastReportAt = TimeSpan.Zero;
-        var lastReportBytes = 0L;
-        var rate = 0d;
-
-        while (true)
+        if (verified)
         {
-            var read = await source.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if (read == 0)
+            return true;
+        }
+
+        // Deleted rather than kept: a corrupt file that stays on disk would be
+        // resumed next time, and resuming corruption never converges.
+        TryDelete(path);
+
+        throw new InvalidOperationException(
+            "The downloaded file did not match the checksum supplied. It has been deleted.");
+    }
+
+    /// <summary>
+    /// Lists the available transports that can move a payload, best first.
+    /// </summary>
+    /// <param name="payload">What is being moved.</param>
+    /// <param name="cancellationToken">Cancels the availability checks.</param>
+    /// <returns>The candidates, in the order they should be tried.</returns>
+    /// <exception cref="InvalidOperationException">Nothing registered can move this payload.</exception>
+    /// <remarks>
+    /// A list rather than a single choice, because availability is answered
+    /// before the work starts and can still be wrong by the time it does — an
+    /// executable that answered <c>--version</c> a moment ago may have been moved
+    /// since. The caller falls through to the next candidate when one cannot
+    /// start.
+    /// </remarks>
+    private async Task<IReadOnlyList<IDownloadTransport>> SelectTransportsAsync(
+        DownloadPayload payload,
+        CancellationToken cancellationToken)
+    {
+        var required = payload == DownloadPayload.Torrent
+            ? TransportCapabilities.Torrent
+            : TransportCapabilities.Http;
+
+        var available = new List<IDownloadTransport>();
+
+        foreach (var candidate in _transports.Where(transport => transport.Capabilities.HasFlag(required)))
+        {
+            if (await candidate.IsAvailableAsync(cancellationToken).ConfigureAwait(false))
             {
-                break;
-            }
-
-            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
-            transferred += read;
-
-            var elapsed = stopwatch.Elapsed;
-            var sinceLastReport = elapsed - lastReportAt;
-
-            // Throttled to a few updates a second. Reporting every buffer would
-            // flood the dispatcher and make the UI slower than the download.
-            if (sinceLastReport < TimeSpan.FromMilliseconds(200))
-            {
+                available.Add(candidate);
                 continue;
             }
 
-            var instantaneous = (transferred - lastReportBytes) / sinceLastReport.TotalSeconds;
-
-            // Smoothed, because raw per-interval rates jitter enough to make the
-            // remaining-time estimate jump around unusably.
-            rate = rate <= 0 ? instantaneous : (rate * 0.7) + (instantaneous * 0.3);
-
-            lastReportAt = elapsed;
-            lastReportBytes = transferred;
-
-            progress?.Report(new DownloadProgress(startingBytes + transferred, totalBytes, rate, elapsed));
+            _logger.LogDebug("{Transport} is not available; trying the next one.", candidate.Name);
         }
 
-        await destination.FlushAsync(cancellationToken).ConfigureAwait(false);
-
-        progress?.Report(new DownloadProgress(
-            startingBytes + transferred, totalBytes, rate, stopwatch.Elapsed));
-
-        return transferred;
+        return available.Count > 0
+            ? available
+            : throw new InvalidOperationException(
+                payload == DownloadPayload.Torrent
+                    ? "Torrent downloads need aria2c, which was not found. Install it, or use a direct HTTP mirror."
+                    : "No download transport is available.");
     }
+
+    /// <summary>
+    /// Works out what an address points at.
+    /// </summary>
+    /// <param name="url">The address.</param>
+    /// <returns>The payload kind.</returns>
+    /// <remarks>
+    /// Inferred rather than declared, so every existing caller keeps working
+    /// unchanged: a <c>magnet:</c> link or a <c>.torrent</c> file is a torrent,
+    /// and anything else is an ordinary file.
+    /// </remarks>
+    internal static DownloadPayload ClassifyPayload(Uri url)
+    {
+        ArgumentNullException.ThrowIfNull(url);
+
+        if (!url.IsAbsoluteUri)
+        {
+            return DownloadPayload.Http;
+        }
+
+        if (string.Equals(url.Scheme, "magnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return DownloadPayload.Torrent;
+        }
+
+        return url.AbsolutePath.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase)
+            ? DownloadPayload.Torrent
+            : DownloadPayload.Http;
+    }
+
+    /// <summary>Adds up the size of everything under a directory.</summary>
+    /// <param name="path">The directory to measure.</param>
+    /// <returns>Total size in bytes, or zero when it does not exist.</returns>
+    private static long DirectorySize(string path) =>
+        Directory.Exists(path)
+            ? new DirectoryInfo(path)
+                .EnumerateFiles("*", SearchOption.AllDirectories)
+                .Sum(file => file.Length)
+            : 0;
 
     /// <summary>
     /// Rejects anything that is not an absolute http or https URL.
     /// </summary>
     /// <param name="url">The URL to check.</param>
+    /// <param name="payload">What the address was classified as.</param>
     /// <exception cref="ArgumentException">The URL is unusable or uses another scheme.</exception>
     /// <remarks>
     /// Blocks <c>file://</c> in particular: a downloader that accepts it turns a
     /// pasted string into an arbitrary local file copy.
     /// </remarks>
-    private static void ValidateUrl(Uri url)
+    private static void ValidateUrl(Uri url, DownloadPayload payload)
     {
         if (!url.IsAbsoluteUri)
         {
             throw new ArgumentException("The download address must be an absolute URL.", nameof(url));
         }
 
+        // Magnet is allowed only now that a torrent-capable transport exists, and
+        // only for an address already classified as one.
+        if (payload == DownloadPayload.Torrent &&
+            string.Equals(url.Scheme, "magnet", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         if (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps)
         {
             throw new ArgumentException(
-                $"Only http and https downloads are supported, but the address uses '{url.Scheme}'.",
+                $"Only http, https and magnet downloads are supported, but the address uses '{url.Scheme}'.",
                 nameof(url));
         }
     }

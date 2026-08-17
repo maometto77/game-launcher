@@ -162,6 +162,126 @@ public sealed record AppSettings
     [JsonPropertyName("steamGridDbApiKey")]
     public string? SteamGridDbApiKey { get; init; }
 
+    /// <summary>
+    /// Whether the discovery catalogue refreshes itself in the background.
+    /// </summary>
+    /// <remarks>
+    /// Off leaves whatever has already been imported browsable. Discovery is an
+    /// addition to the launcher, never a prerequisite for it — the library, the
+    /// installs and the achievements all work with this switched off.
+    /// </remarks>
+    [JsonPropertyName("discoveryEnabled")]
+    public bool DiscoveryEnabled { get; init; }
+
+    /// <summary>
+    /// Internet Archive collections to import.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A setting rather than a constant because it is the whole scope of what
+    /// gets imported. <c>softwarelibrary_msdos_games</c> holds about 8 900
+    /// items; the parent <c>softwarelibrary</c> holds over 230 000 and is far too
+    /// broad to take wholesale.
+    /// </para>
+    /// <para>
+    /// Empty means the source has nothing to do and reports itself unavailable,
+    /// which is not an error.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("internetArchiveCollections")]
+    public IReadOnlyList<string> InternetArchiveCollections { get; init; } =
+        ["softwarelibrary_msdos_games"];
+
+    /// <summary>
+    /// Whether MyAbandonware is imported alongside the Internet Archive.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="DiscoveryEnabled"/> and off by default. That
+    /// site's <c>robots.txt</c> disallows its download paths, so the source
+    /// contributes metadata only — worth having for titles, genres and
+    /// screenshots, but a different proposition from a source that supplies
+    /// installable files, and worth an explicit decision.
+    /// </remarks>
+    [JsonPropertyName("myAbandonwareEnabled")]
+    public bool MyAbandonwareEnabled { get; init; }
+
+    /// <summary>
+    /// An Internet Archive uploader whose items should be imported, or
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The search index stores an uploader as an email address, which is what
+    /// this must be — a screen name will not match. It is combined with
+    /// <see cref="InternetArchiveCollections"/> rather than replacing it, so an
+    /// import can cover curated collections and one person's uploads at once.
+    /// </para>
+    /// <para>
+    /// An uploader's items are whatever that person chose to upload. Unlike a
+    /// curated collection, nothing about them is vouched for by the Archive, so
+    /// this is left empty by default and is an explicit choice.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("internetArchiveUploader")]
+    public string? InternetArchiveUploader { get; init; }
+
+    /// <summary>
+    /// Whether downloads should use <c>aria2c</c> when it is available.
+    /// </summary>
+    /// <remarks>
+    /// Off by default. Turning it on lets the launcher start an external process,
+    /// which is a decision worth making explicitly rather than inheriting because
+    /// a binary happens to be on the path. With it off — or with aria2c missing —
+    /// the built-in HttpClient engine handles every download exactly as before.
+    /// </remarks>
+    [JsonPropertyName("aria2Enabled")]
+    public bool Aria2Enabled { get; init; }
+
+    /// <summary>
+    /// Extra directories to watch for local achievement files.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added to the three the launcher already knows — Goldberg's saves folder
+    /// and the RUNE and CODEX folders under Public Documents — rather than
+    /// replacing them. Each must be a directory holding one folder per Steam
+    /// application id, because that folder name is the only place the id appears.
+    /// </para>
+    /// <para>
+    /// Exists because these locations are conventions rather than standards, and
+    /// the next writer to appear will invent a fourth. A setting means that costs
+    /// the user a path rather than a release.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("achievementWatchRoots")]
+    public IReadOnlyList<string> AchievementWatchRoots { get; init; } = [];
+
+    /// <summary>
+    /// Full path to <c>aria2c</c>, or <see langword="null"/> to find it on the
+    /// system path.
+    /// </summary>
+    [JsonPropertyName("aria2ExecutablePath")]
+    public string? Aria2ExecutablePath { get; init; }
+
+    /// <summary>
+    /// How many connections aria2 opens per download.
+    /// </summary>
+    /// <remarks>
+    /// The reason to use aria2 at all: one stream is limited by per-connection
+    /// shaping, and several are not. Clamped when applied — the Archive asks
+    /// clients not to open more than a handful.
+    /// </remarks>
+    [JsonPropertyName("aria2Connections")]
+    public int Aria2Connections { get; init; } = 4;
+
+    /// <summary>Hours between background catalogue refreshes.</summary>
+    [JsonPropertyName("discoveryRefreshHours")]
+    public int DiscoveryRefreshHours { get; init; } = 24;
+
+    /// <summary>Largest size the cached catalogue artwork may reach, in megabytes.</summary>
+    [JsonPropertyName("discoveryImageCacheMegabytes")]
+    public int DiscoveryImageCacheMegabytes { get; init; } = 500;
+
     /// <summary>Gets a value indicating whether a relay has been configured.</summary>
     [JsonIgnore]
     public bool HasRelay => !string.IsNullOrWhiteSpace(RelayUrl);

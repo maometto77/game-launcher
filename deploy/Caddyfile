@@ -1,0 +1,44 @@
+# Caddy obtains and renews the certificate itself; there is nothing to schedule.
+
+{$RELAY_DOMAIN} {
+	tls {$RELAY_ACME_EMAIL}
+
+	encode zstd gzip
+
+	# SignalR. The presence hub upgrades to WebSockets, and a proxy that
+	# buffers or times the connection out turns "friends are offline" into a
+	# permanent state rather than a transient one.
+	@hub path /hubs/*
+	handle @hub {
+		reverse_proxy relay:8080 {
+			transport http {
+				# Long enough for a hub connection to live between
+				# heartbeats; the relay sends one every 60 seconds.
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy relay:8080
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+
+		# The relay is an API. Nothing it returns should be cached by
+		# anything in between.
+		Cache-Control "no-store"
+
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

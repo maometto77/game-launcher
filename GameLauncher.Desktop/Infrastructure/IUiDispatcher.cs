@@ -51,22 +51,53 @@ public sealed class UiDispatcher : IUiDispatcher
     /// running, which is what lets this type be constructed in a test host.
     /// </remarks>
     public UiDispatcher()
+        : this(Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher)
     {
-        _dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+    }
+
+    /// <summary>
+    /// Initialises a new instance bound to a specific dispatcher.
+    /// </summary>
+    /// <param name="dispatcher">The dispatcher to marshal onto.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="dispatcher"/> is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Internal, and only so a test can bind one to a dispatcher it controls.
+    /// The behaviour worth pinning — that a dispatcher which has shut down is
+    /// run past rather than queued to — cannot be reached otherwise, and it is
+    /// the behaviour that stops application exit hanging on itself.
+    /// </remarks>
+    internal UiDispatcher(Dispatcher dispatcher)
+    {
+        _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
     }
 
     /// <inheritdoc />
     public bool IsOnUiThread => _dispatcher.CheckAccess();
+
+    /// <summary>
+    /// Gets a value indicating whether queueing work would be pointless.
+    /// </summary>
+    /// <remarks>
+    /// A dispatcher that has begun shutting down will never pump another
+    /// operation. Anything queued to it is waited on by a caller that will not be
+    /// released — which during application exit means the shutdown path hanging
+    /// on itself, because a service saving its state on the way out is exactly
+    /// the sort of thing that raises an event through here.
+    /// </remarks>
+    private bool CannotDispatch => _dispatcher.HasShutdownStarted || _dispatcher.HasShutdownFinished;
 
     /// <inheritdoc />
     public void Invoke(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        if (_dispatcher.CheckAccess())
+        if (_dispatcher.CheckAccess() || CannotDispatch)
         {
             // Running inline avoids a needless queue hop and keeps the call
-            // re-entrant-safe for callers already on the UI thread.
+            // re-entrant-safe for callers already on the UI thread. During
+            // shutdown it is also the only option that completes: the handler
+            // runs on the caller's thread, which is safe precisely because there
+            // is no longer any interface for it to touch.
             action();
             return;
         }
@@ -79,7 +110,7 @@ public sealed class UiDispatcher : IUiDispatcher
     {
         ArgumentNullException.ThrowIfNull(action);
 
-        if (_dispatcher.CheckAccess())
+        if (_dispatcher.CheckAccess() || CannotDispatch)
         {
             action();
             return Task.CompletedTask;

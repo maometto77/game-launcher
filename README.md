@@ -30,6 +30,19 @@ configured, and nothing in the launcher blocks on the network.
   turn rather than on top of one another.
 - **Friends** — friend codes, requests and presence over SignalR, with a local
   cache so the page still works with the relay down.
+- **Discover** — an optional catalogue of games that exist, imported from the
+  Internet Archive's software libraries and, if you switch it on, described
+  further by MyAbandonware. Full-text search, genre and platform filters, and
+  one-click install through the same download path as everything else, with the
+  checksum the source published. **Off by default:** nothing is fetched from any
+  source until you turn it on in Settings.
+- **Custom sourcing feeds** — describe your own feed in a YAML or JSON file in
+  `%LOCALAPPDATA%\GameLauncher\adapters\` and the launcher takes download
+  addresses from it: a home server, a preservation project's export, an RSS feed
+  of releases, or a JSON file on this machine with no server at all. Checksums
+  and torrents come through the same path as everything else. When mapping is
+  not enough, a manifest can pipe the payload through a program you nominate.
+  [Full contract](docs/sourcing-adapters.md).
 
 ## Layout
 
@@ -83,12 +96,24 @@ dotnet build "GameLauncher.sln"
 dotnet test "GameLauncher.Tests/GameLauncher.Tests.csproj"
 ```
 
-Expect **0 warnings, 0 errors** and **150 passing tests**. Warnings are
+Expect **0 warnings, 0 errors** and **544 passing tests**. Warnings are
 meaningful here: CS1591 (missing XML documentation) is deliberately left visible,
 so a non-zero warning count means something regressed.
 
 The test suite includes a real Kestrel server on a loopback port for the download
 path and an in-process relay for the hub tests. Nothing reaches the network.
+
+---
+
+## Ship it
+
+```bash
+dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
+```
+
+One self-contained `GameLauncher.Desktop.exe`, about 78 MB, that runs on Windows
+with no .NET installed. An Inno Setup script and a one-command VPS deployment for
+the optional relay are in [`deploy/`](deploy/README.md).
 
 ---
 
@@ -118,6 +143,7 @@ executable, so the app runs from Program Files without elevation.
 | `settings.json` | Settings **and relay credentials** |
 | `logs\` | Rolling log files |
 | `artwork\`, `achievements\`, `avatars\` | Extracted and cached images |
+| `adapters\` | Your own sourcing feed manifests and script stubs |
 | `downloads\` | In-progress downloads (`.part` files) |
 | `games\` | Default install target |
 
@@ -167,6 +193,7 @@ For anything beyond your own machine, see **[docs/deployment.md](docs/deployment
 |---|---|
 | [docs/project-handoff.md](docs/project-handoff.md) | The full picture: architecture, schema, decisions and their reasoning, conventions, testing, open questions. **Start here to work on the code.** |
 | [docs/catalog-identity.md](docs/catalog-identity.md) | Shared catalog identity, merging duplicates, moving between relays |
+| [docs/catalog-import-design.md](docs/catalog-import-design.md) | The discovery catalogue: sources, matching, merging, and what running it against the live APIs changed |
 | [docs/relay-architecture.md](docs/relay-architecture.md) | Authentication, sync conflict resolution, portability |
 | [docs/deployment.md](docs/deployment.md) | Hosting the relay: reverse proxy, tunnels, LAN vs internet, backups |
 

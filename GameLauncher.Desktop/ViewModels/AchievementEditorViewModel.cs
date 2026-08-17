@@ -10,6 +10,7 @@ using GameLauncher.Desktop.Services.Achievements.Providers;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Launcher;
+using GameLauncher.Desktop.Services.Saves;
 using Microsoft.Extensions.Logging;
 
 namespace GameLauncher.Desktop.ViewModels;
@@ -52,6 +53,7 @@ public sealed partial class AchievementEditorViewModel : DialogViewModelBase
     private readonly IAchievementEngine _engine;
     private readonly IGameLaunchService _launcher;
     private readonly IDialogService _dialogs;
+    private readonly ISavePathResolver _saves;
     private readonly ILogger<AchievementEditorViewModel> _logger;
 
     /// <summary>The definition being edited, or <see langword="null"/> when authoring a new one.</summary>
@@ -157,6 +159,7 @@ public sealed partial class AchievementEditorViewModel : DialogViewModelBase
     /// <param name="engine">Supplies the provider list and the non-persisting test read.</param>
     /// <param name="launcher">Finds a running process so a memory rule can be tested.</param>
     /// <param name="dialogs">File picker for save-file rules.</param>
+    /// <param name="saves">Suggests where a game keeps its saves.</param>
     /// <param name="logger">Logger for editor diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public AchievementEditorViewModel(
@@ -166,6 +169,7 @@ public sealed partial class AchievementEditorViewModel : DialogViewModelBase
         IAchievementEngine engine,
         IGameLaunchService launcher,
         IDialogService dialogs,
+        ISavePathResolver saves,
         ILogger<AchievementEditorViewModel> logger)
     {
         _achievements = achievements ?? throw new ArgumentNullException(nameof(achievements));
@@ -174,6 +178,7 @@ public sealed partial class AchievementEditorViewModel : DialogViewModelBase
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _saves = saves ?? throw new ArgumentNullException(nameof(saves));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         Providers = new ObservableCollection<AchievementProviderDescriptor>(_engine.Providers);
@@ -623,16 +628,73 @@ public sealed partial class AchievementEditorViewModel : DialogViewModelBase
     }
 
     /// <summary>Chooses the save file a save-file rule reads.</summary>
+    /// <returns>A task that completes once a file has been chosen or the picker cancelled.</returns>
+    /// <remarks>
+    /// The picker opens at the game's known save directory when the Ludusavi
+    /// manifest has one. Save locations are buried under AppData, Documents and
+    /// install folders, and finding one by hand is the tedious part of authoring
+    /// a save-file rule — starting in the right place removes most of it.
+    /// </remarks>
     [RelayCommand]
-    private void BrowseSaveFile()
+    private async Task BrowseSaveFileAsync()
     {
+        var suggestion = await SuggestSaveDirectoryAsync().ConfigureAwait(true);
+
         var picked = _dialogs.PickFile(
             "Select the save file",
-            "Save files|*.json;*.xml;*.ini;*.sav;*.dat|All files|*.*");
+            "Save files|*.json;*.xml;*.ini;*.sav;*.dat|All files|*.*",
+            suggestion);
 
         if (!string.IsNullOrWhiteSpace(picked))
         {
             SaveFilePath = picked;
+        }
+    }
+
+    /// <summary>
+    /// Asks the manifest where the selected game keeps its saves.
+    /// </summary>
+    /// <returns>A directory to open the picker at, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// Best effort throughout. A game the manifest does not cover, an unreachable
+    /// manifest or an unresolvable path all mean the same thing here — the picker
+    /// opens wherever it would have anyway.
+    /// </remarks>
+    private async Task<string?> SuggestSaveDirectoryAsync()
+    {
+        if (SelectedTarget is not { } target || string.IsNullOrWhiteSpace(target.Title))
+        {
+            return null;
+        }
+
+        try
+        {
+            var game = target.GameId is { } id
+                ? await _games.GetByIdAsync(id).ConfigureAwait(true)
+                : null;
+
+            var result = await _saves.ResolveAsync(new SavePathQuery
+            {
+                Title = target.Title,
+                InstallDirectory = game?.InstallDir
+            }).ConfigureAwait(true);
+
+            var location = result.Locations.FirstOrDefault(candidate =>
+                candidate.Kind != SaveLocationKind.Registry);
+
+            if (location is null)
+            {
+                return null;
+            }
+
+            return location.Kind == SaveLocationKind.Directory
+                ? location.Path
+                : Path.GetDirectoryName(location.Path);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Suggesting a save directory for {Title} failed.", target.Title);
+            return null;
         }
     }
 

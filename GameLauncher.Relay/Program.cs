@@ -6,6 +6,7 @@ using GameLauncher.Relay.Hubs;
 using GameLauncher.Relay.Security;
 using GameLauncher.Shared.Hubs;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.SignalR;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -94,7 +95,31 @@ if (relayOptions.AllowedOrigins.Count > 0)
         .AllowCredentials()));
 }
 
+// ---------------------------------------------------------------------------
+// Reverse proxy
+//
+// On a VPS this sits behind Caddy or Nginx terminating TLS, so every request
+// arrives over plain HTTP from a loopback address. Without this the application
+// sees that literally: it believes the scheme is http and the client address is
+// the proxy's, which makes any absolute URL it generates wrong and every request
+// look like it came from the same machine.
+//
+// The known-proxies list is cleared deliberately. In a container the proxy's
+// address is assigned by the container network and is not knowable in advance;
+// the protection that matters is that nothing but the proxy can reach the
+// application's port, which the Compose file arranges by not publishing it.
+// ---------------------------------------------------------------------------
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
 
 // ---------------------------------------------------------------------------
 // Schema
