@@ -79,11 +79,34 @@ public sealed class DownloadService : IDownloadService
 
         Directory.CreateDirectory(request.DestinationDirectory);
 
-        var transport = await SelectTransportAsync(payload, cancellationToken).ConfigureAwait(false);
+        var transports = await SelectTransportsAsync(payload, cancellationToken).ConfigureAwait(false);
 
-        return payload == DownloadPayload.Torrent
-            ? await DownloadTorrentAsync(request, transport, progress, cancellationToken).ConfigureAwait(false)
-            : await DownloadFileAsync(request, transport, progress, cancellationToken).ConfigureAwait(false);
+        for (var index = 0; index < transports.Count; index++)
+        {
+            var transport = transports[index];
+
+            try
+            {
+                return payload == DownloadPayload.Torrent
+                    ? await DownloadTorrentAsync(request, transport, progress, cancellationToken)
+                        .ConfigureAwait(false)
+                    : await DownloadFileAsync(request, transport, progress, cancellationToken)
+                        .ConfigureAwait(false);
+            }
+            catch (TransportUnavailableException ex) when (index < transports.Count - 1)
+            {
+                // Only ever thrown before anything was transferred, so handing the
+                // same request to the next engine cannot fetch the file twice.
+                // A transport that answered its availability probe and then would
+                // not start is the case this exists for.
+                _logger.LogWarning(
+                    ex, "{Transport} could not start; falling back to the next transport.", transport.Name);
+            }
+        }
+
+        // Unreachable: the loop returns or rethrows on the last candidate, and
+        // SelectTransportsAsync never returns an empty list.
+        throw new InvalidOperationException("No download transport could start.");
     }
 
     /// <summary>
@@ -226,13 +249,20 @@ public sealed class DownloadService : IDownloadService
     }
 
     /// <summary>
-    /// Picks the best available transport for a payload.
+    /// Lists the available transports that can move a payload, best first.
     /// </summary>
     /// <param name="payload">What is being moved.</param>
     /// <param name="cancellationToken">Cancels the availability checks.</param>
-    /// <returns>The chosen transport.</returns>
+    /// <returns>The candidates, in the order they should be tried.</returns>
     /// <exception cref="InvalidOperationException">Nothing registered can move this payload.</exception>
-    private async Task<IDownloadTransport> SelectTransportAsync(
+    /// <remarks>
+    /// A list rather than a single choice, because availability is answered
+    /// before the work starts and can still be wrong by the time it does — an
+    /// executable that answered <c>--version</c> a moment ago may have been moved
+    /// since. The caller falls through to the next candidate when one cannot
+    /// start.
+    /// </remarks>
+    private async Task<IReadOnlyList<IDownloadTransport>> SelectTransportsAsync(
         DownloadPayload payload,
         CancellationToken cancellationToken)
     {
@@ -240,20 +270,25 @@ public sealed class DownloadService : IDownloadService
             ? TransportCapabilities.Torrent
             : TransportCapabilities.Http;
 
+        var available = new List<IDownloadTransport>();
+
         foreach (var candidate in _transports.Where(transport => transport.Capabilities.HasFlag(required)))
         {
             if (await candidate.IsAvailableAsync(cancellationToken).ConfigureAwait(false))
             {
-                return candidate;
+                available.Add(candidate);
+                continue;
             }
 
             _logger.LogDebug("{Transport} is not available; trying the next one.", candidate.Name);
         }
 
-        throw new InvalidOperationException(
-            payload == DownloadPayload.Torrent
-                ? "Torrent downloads need aria2c, which was not found. Install it, or use a direct HTTP mirror."
-                : "No download transport is available.");
+        return available.Count > 0
+            ? available
+            : throw new InvalidOperationException(
+                payload == DownloadPayload.Torrent
+                    ? "Torrent downloads need aria2c, which was not found. Install it, or use a direct HTTP mirror."
+                    : "No download transport is available.");
     }
 
     /// <summary>

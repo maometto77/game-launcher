@@ -1506,3 +1506,91 @@ explains rather than offering addresses that would answer 403.
    crawl.
 3. **No user interface for manifests.** They are files, edited in a text editor,
    and failures are reported to the log rather than on screen.
+
+## 18. aria2 over JSON-RPC
+
+The aria2 transport reported progress by watching the part file grow. That
+cannot see a total size before the file reaches it, cannot see a rate across
+several connections, and — for a torrent, which has no single growing file —
+could report nothing at all beyond an indeterminate bar. `DownloadJob.Peers`
+existed and was never populated.
+
+Each transfer now asks its aria2c to open a JSON-RPC interface while it runs, and
+polls `aria2.tellActive` for `completedLength`, `totalLength`, `downloadSpeed`,
+`connections` and `numSeeders`.
+
+### 18.1 A process per transfer, not a daemon
+
+The obvious reading of "enable the RPC interface" is a long-lived aria2c the
+launcher adds downloads to. This does not do that. A process per transfer,
+exiting when its transfer ends, means no port held while nothing is downloading,
+no daemon lifetime to manage across application close, and no way for one
+download to disturb another. The process is already bound to the work it was
+started for, so the shutdown question answers itself.
+
+The cost is that transfers are still started on the command line rather than
+through `aria2.addUri`. That is also a benefit: the RPC interface is a statistics
+channel, and nothing that matters breaks when it fails.
+
+### 18.2 The credential
+
+A fresh 256-bit secret per transfer, on a port bound to loopback only.
+
+It goes on aria2c's command line, which means a process running as this same user
+could read it from the process list. The alternative — a configuration file — was
+rejected because `--conf-path` makes aria2c ignore the user's own `aria2.conf`,
+losing their proxy and bandwidth settings to close a gap that only opens to
+someone already running as them. The token authorises one loopback endpoint for
+the length of one download.
+
+### 18.3 Falling back, and a bug found by measuring
+
+Statistics are never worth a failed download. If the port does not answer, the
+transport reverts to measuring the file exactly as before.
+
+The first version counted failed polls and gave up after six, reasoning that six
+half-second intervals was three seconds of patience. Measurement said otherwise:
+**Windows takes about two seconds to report a refused loopback connection**, so
+six attempts was fifteen seconds, and a short transfer would finish having
+reported nothing at all. Two changes followed — the grace period is now a
+deadline measured from the start of the transfer rather than a count of attempts,
+and the file is measured *while* RPC is still being tried, so a bar starts moving
+immediately instead of waiting to learn whether a port is coming up. Once RPC has
+answered once, aria2 is authoritative and the file is left alone.
+
+The RPC client's own timeout is one second. A poll that cannot beat its own
+sampling interval is worthless, and a slow one holds up the reporting loop.
+
+### 18.4 Stopping
+
+Cancellation asks over RPC (`aria2.shutdown`) before killing. A killed aria2 may
+not have written its control file, and without that file the next attempt cannot
+tell which pieces of the part file are real, so it starts again from nothing —
+the difference between a paused download resuming and a paused download
+restarting.
+
+Closing the launcher is the case cancellation alone does not cover: the
+cancellation and the process's death are separate events, and an application that
+has exited is not around to see the second one. The transport tracks the
+processes it started and ends them when it is disposed.
+
+### 18.5 A transport that will not start is not a failed download
+
+`TransportUnavailableException` distinguishes "nothing was attempted" from "the
+transfer failed". Availability is answered before the work begins and can be
+wrong by the time it starts — an executable that answered `--version` a moment
+ago may have been moved since. The download service now holds the ordered list of
+capable transports rather than one choice, and falls through on that exception
+only; anything else propagates, because retrying a partly-finished transfer
+elsewhere could fetch the file twice.
+
+### 18.6 What is still unverified
+
+**No transfer has been run against a real aria2c.** The binary is not installed
+on the development machine. The RPC parsing is tested against captured
+response bodies over a real socket, and the transport is tested end to end
+against a stub that stands in for aria2c — including one test that reads the port
+off the stub's command line, binds it, and answers, which is the same path a real
+aria2c would take. What remains untested is aria2's own behaviour: whether its
+`connections` figure means what the documentation says during a real swarm, and
+how quickly `numSeeders` settles.

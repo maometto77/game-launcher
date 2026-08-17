@@ -281,6 +281,17 @@ public static class ServiceRegistration
         services.AddSingleton<IDownloadTransport, Aria2DownloadTransport>();
         services.AddSingleton<IDownloadTransport, HttpDownloadTransport>();
 
+        // Statistics from the aria2c that is currently running, over loopback.
+        // The timeout is short on purpose. A poll that outlives the interval
+        // between polls is worthless, and a missed sample costs nothing because
+        // the next one is half a second away — whereas a slow one holds up the
+        // whole reporting loop. One second is a very long time for a call to a
+        // process on this machine.
+        services.AddHttpClient(Aria2RpcClient.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(1);
+        });
+
         services.AddSingleton<IDownloadService, DownloadService>();
         services.AddSingleton<IArchiveExtractionService, ArchiveExtractionService>();
         services.AddSingleton<IInstallFromUrlService, InstallFromUrlService>();

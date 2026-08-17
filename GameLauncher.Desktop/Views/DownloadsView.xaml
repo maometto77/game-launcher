@@ -201,7 +201,9 @@
                                              row twitch. -->
                                         <Grid Grid.Column="1">
                                             <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="80" />
+                                                <!-- Wide enough for "888 peers · 88 seeds", which is
+                                                     what a healthy torrent reports. -->
+                                                <ColumnDefinition Width="150" />
                                                 <ColumnDefinition Width="150" />
                                                 <ColumnDefinition Width="90" />
                                                 <ColumnDefinition Width="110" />

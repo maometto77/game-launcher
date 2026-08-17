@@ -56,6 +56,10 @@ configured, and nothing in the launcher blocks on the network.
 - No bundled torrent client. Torrents and magnet links work only if you have
   aria2c installed and switch it on; the launcher shells out to it and never
   ships one. With aria2 off, every download is plain HTTP.
+- **No aria2 daemon.** Each transfer gets its own aria2c, which opens a JSON-RPC
+  interface on a loopback port with a fresh secret while it runs — that is where
+  live speed, size and peer/seed counts come from — and exits when the transfer
+  ends. Nothing listens while nothing is downloading.
 - **Nothing is imported or fetched from a path a site's `robots.txt` disallows.**
   MyAbandonware disallows its download paths, so that source contributes titles,
   genres and screenshots only — never anything to download. Custom feeds pass
@@ -120,7 +124,7 @@ dotnet build "GameLauncher.sln"
 dotnet test "GameLauncher.Tests/GameLauncher.Tests.csproj"
 ```
 
-Expect **0 warnings, 0 errors** and **150 passing tests**. Warnings are
+Expect **0 warnings, 0 errors** and **493 passing tests**. Warnings are
 meaningful here: CS1591 (missing XML documentation) is deliberately left visible,
 so a non-zero warning count means something regressed.
 
@@ -155,6 +159,7 @@ executable, so the app runs from Program Files without elevation.
 | `settings.json` | Settings **and relay credentials** |
 | `logs\` | Rolling log files |
 | `artwork\`, `achievements\`, `avatars\` | Extracted and cached images |
+| `adapters\` | Your own sourcing feed manifests and script stubs |
 | `downloads\` | In-progress downloads (`.part` files) |
 | `games\` | Default install target |
 

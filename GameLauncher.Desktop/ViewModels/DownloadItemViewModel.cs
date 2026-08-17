@@ -78,8 +78,17 @@ public sealed partial class DownloadItemViewModel : ObservableObject
                 : $"{remaining.Seconds}s left"
         : string.Empty;
 
-    /// <summary>Gets the peer count for a torrent, as text.</summary>
-    public string PeersText => Job.Peers is { } peers ? $"{peers} peers" : string.Empty;
+    /// <summary>Gets the connection counts, as text.</summary>
+    /// <remarks>
+    /// Seeders are shown beside peers only for a torrent, because only a torrent
+    /// has them. Empty for a transport that reports neither, so an ordinary HTTP
+    /// download does not carry a column of nothing.
+    /// </remarks>
+    public string PeersText => Job.Peers is not { } peers
+        ? string.Empty
+        : Job.Seeders is { } seeders
+            ? $"{peers} peers · {seeders} seeds"
+            : $"{peers} peers";
 
     /// <summary>Gets the line of detail under the title.</summary>
     public string DetailText => Job.Error ?? Job.StatusMessage ?? string.Empty;

@@ -549,15 +549,40 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
         // install path now carries this through rather than reducing it.
         if (update.Transfer is { } transfer)
         {
-            job.BytesReceived = transfer.BytesReceived;
-            job.TotalBytes = transfer.TotalBytes;
-            job.BytesPerSecond = transfer.BytesPerSecond;
-            job.Elapsed = transfer.Elapsed;
+            ApplyTransfer(job, transfer);
         }
         else if (update.Fraction is { } fraction && job.TotalBytes is > 0)
         {
             job.BytesReceived = (long)(job.TotalBytes.Value * fraction);
         }
+    }
+
+    /// <summary>
+    /// Copies a transport's own numbers onto a job.
+    /// </summary>
+    /// <param name="job">The job being reported on.</param>
+    /// <param name="transfer">What the transport said.</param>
+    /// <remarks>
+    /// Separated from the rest of <see cref="Apply"/> because it is the one part
+    /// with no dependence on phase, timing or the queue itself: a pure copy, and
+    /// the only place the connection counts are interpreted.
+    /// </remarks>
+    internal static void ApplyTransfer(DownloadJob job, DownloadProgress transfer)
+    {
+        ArgumentNullException.ThrowIfNull(job);
+        ArgumentNullException.ThrowIfNull(transfer);
+
+        job.BytesReceived = transfer.BytesReceived;
+        job.TotalBytes = transfer.TotalBytes;
+        job.BytesPerSecond = transfer.BytesPerSecond;
+        job.Elapsed = transfer.Elapsed;
+
+        // Kept when a report omits them rather than blanked. aria2's RPC
+        // interface is polled on its own schedule, so a progress report can
+        // arrive between two answers, and a peer count that blinked out every
+        // other update would read as a fault rather than as no news.
+        job.Peers = transfer.Peers ?? job.Peers;
+        job.Seeders = transfer.Seeders ?? job.Seeders;
     }
 
     /// <summary>Finds a job by identity. The caller holds the lock.</summary>

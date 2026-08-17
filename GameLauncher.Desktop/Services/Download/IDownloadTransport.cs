@@ -31,6 +31,39 @@ public enum TransportCapabilities
 }
 
 /// <summary>
+/// Thrown when a transport cannot start the work at all.
+/// </summary>
+/// <remarks>
+/// Deliberately narrower than a failed transfer. This means nothing was
+/// attempted — the engine is missing, or would not launch — so the caller is free
+/// to hand the same request to another transport. A transfer that started and
+/// then failed is a different situation and throws something else, because
+/// retrying it elsewhere might quietly download the file twice.
+/// </remarks>
+public sealed class TransportUnavailableException : Exception
+{
+    /// <summary>Initialises a new instance.</summary>
+    public TransportUnavailableException()
+    {
+    }
+
+    /// <summary>Initialises a new instance.</summary>
+    /// <param name="message">Why the transport could not start.</param>
+    public TransportUnavailableException(string message)
+        : base(message)
+    {
+    }
+
+    /// <summary>Initialises a new instance.</summary>
+    /// <param name="message">Why the transport could not start.</param>
+    /// <param name="innerException">The underlying failure.</param>
+    public TransportUnavailableException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
+/// <summary>
 /// One transfer for a transport to perform.
 /// </summary>
 public sealed record TransportRequest

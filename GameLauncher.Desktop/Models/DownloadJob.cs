@@ -101,12 +101,20 @@ public sealed class DownloadJob
     /// <summary>How many mirrors have been tried.</summary>
     public int MirrorsTried { get; set; }
 
-    /// <summary>Peers connected, for a torrent transfer.</summary>
+    /// <summary>Peers or servers connected.</summary>
     /// <remarks>
-    /// Null for an HTTP transfer, and for a torrent whose engine does not report
-    /// it. Distinguished from zero, which means connected to none.
+    /// Null when the engine does not report it — the built-in transport never
+    /// does, and aria2 only does when its RPC interface answers. Distinguished
+    /// from zero, which means connected to none.
     /// </remarks>
     public int? Peers { get; set; }
+
+    /// <summary>Seeders connected, for a torrent transfer.</summary>
+    /// <remarks>
+    /// Null for an HTTP transfer. A torrent with peers but no seeders is a
+    /// download that may never finish, which is worth being able to see.
+    /// </remarks>
+    public int? Seeders { get; set; }
 
     /// <summary>Where the finished download was unpacked, once it has been.</summary>
     public string? InstallDirectory { get; set; }
