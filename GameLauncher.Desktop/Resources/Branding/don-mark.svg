@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 10 156 211" width="156" height="211" role="img">
+  <title>Don</title>
+  <desc>A hand gripping a marionette control bar, with three strings falling from it into a shield.</desc>
+
+  <!--
+    The mark, and the source of truth for every raster size.
+
+    A hand on the control bar, three streams under it, one sealed thing at the
+    end. It is the download path drawn literally: several mirrors and sources,
+    one hand deciding between them, one verified file out the other side.
+
+    Two things make it read. The fingers are drawn AFTER the bar, so they sit in
+    front of it — a hand in front of a bar is unmistakably a hand holding it,
+    where the same shapes stacked above it are just slabs. And the form turns
+    using only the two palette colours: every shadow plane is #09090B over
+    #FAFAFA at partial opacity, so there is depth without a third colour. Delete
+    the shadow paths and this is still a correct one-colour mark.
+
+    Palette, and only these three:
+      #09090B  near-black    field, shadow planes, the gaps between fingers
+      #FAFAFA  crisp white   hand, bar, strings
+      #DC2626  crimson       shield
+
+    deploy/branding/IconGenerator reads these exact path strings to build
+    don.ico, so this file and the icon cannot drift into being two drawings.
+    Change the geometry here, then re-run it.
+  -->
+
+  <!-- behind the bar -->
+  <path d="M84 14 H124 L128 38 H80 Z" fill="#FAFAFA"/>
+  <path d="M62 40 H146 L150 62 L146 80 H66 L58 62 Z" fill="#FAFAFA"/>
+
+  <path d="M108 14 H124 L128 38 H108 Z" fill="#09090B" opacity="0.28"/>
+  <path d="M124 40 H146 L150 62 L146 80 H124 Z" fill="#09090B" opacity="0.28"/>
+
+  <!-- the control bar -->
+  <path d="M26 92 H174 A7 7 0 0 1 174 106 H26 A7 7 0 0 1 26 92 Z" fill="#FAFAFA"/>
+  <path d="M120 92 H174 A7 7 0 0 1 174 106 H120 Z" fill="#09090B" opacity="0.30"/>
+
+  <!-- in front of it: the grip -->
+  <path d="M60 66 L46 84 L44 100 L56 106 L70 88 L70 70 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+  <path d="M68 74 H88 V104 Q88 114 78 114 Q68 114 68 104 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+  <path d="M94 74 H114 V108 Q114 118 104 118 Q94 118 94 108 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+  <path d="M120 74 H140 V102 Q140 112 130 112 Q120 112 120 102 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+
+  <path d="M52 76 L44 100 L56 106 L62 94 Z" fill="#09090B" opacity="0.24"/>
+  <path d="M81 74 H88 V104 Q88 114 78 114 Z" fill="#09090B" opacity="0.32"/>
+  <path d="M107 74 H114 V108 Q114 118 104 118 Z" fill="#09090B" opacity="0.32"/>
+  <path d="M133 74 H140 V102 Q140 112 130 112 Z" fill="#09090B" opacity="0.32"/>
+
+  <!-- three streams, converging on one point -->
+  <path d="M52 106 L100 162 M100 118 L100 162 M148 106 L100 162"
+        stroke="#FAFAFA" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- the shield: what comes out the other end, verified -->
+  <path d="M68 162 H132 V186 C132 201 119 210 100 217 C81 210 68 201 68 186 Z" fill="#DC2626"/>
+  <path d="M132 162 V186 C132 201 119 210 100 217 V162 Z" fill="#09090B" opacity="0.22"/>
+</svg>

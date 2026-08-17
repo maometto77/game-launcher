@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 250" width="520" height="250" role="img">
+  <title>Don Launcher</title>
+  <desc>The Don hand-and-shield mark beside the Don Launcher wordmark, on a near-black field.</desc>
+
+  <!--
+    Horizontal lockup, for a README header, a splash, or an installer banner.
+    The mark's geometry is identical to don-mark.svg; only its position changes.
+
+    Clear space: keep at least the height of the control bar (14 units at the
+    mark's own scale) free on every side, and never set the wordmark closer to
+    the mark than it sits here.
+  -->
+
+  <rect width="520" height="250" fill="#09090B"/>
+
+  <g transform="translate(4,16)">
+    <path d="M84 14 H124 L128 38 H80 Z" fill="#FAFAFA"/>
+    <path d="M62 40 H146 L150 62 L146 80 H66 L58 62 Z" fill="#FAFAFA"/>
+    <path d="M108 14 H124 L128 38 H108 Z" fill="#09090B" opacity="0.28"/>
+    <path d="M124 40 H146 L150 62 L146 80 H124 Z" fill="#09090B" opacity="0.28"/>
+
+    <path d="M26 92 H174 A7 7 0 0 1 174 106 H26 A7 7 0 0 1 26 92 Z" fill="#FAFAFA"/>
+    <path d="M120 92 H174 A7 7 0 0 1 174 106 H120 Z" fill="#09090B" opacity="0.30"/>
+
+    <path d="M60 66 L46 84 L44 100 L56 106 L70 88 L70 70 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+    <path d="M68 74 H88 V104 Q88 114 78 114 Q68 114 68 104 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+    <path d="M94 74 H114 V108 Q114 118 104 118 Q94 118 94 108 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+    <path d="M120 74 H140 V102 Q140 112 130 112 Q120 112 120 102 Z" fill="#FAFAFA" stroke="#09090B" stroke-width="2.4"/>
+
+    <path d="M52 76 L44 100 L56 106 L62 94 Z" fill="#09090B" opacity="0.24"/>
+    <path d="M81 74 H88 V104 Q88 114 78 114 Z" fill="#09090B" opacity="0.32"/>
+    <path d="M107 74 H114 V108 Q114 118 104 118 Z" fill="#09090B" opacity="0.32"/>
+    <path d="M133 74 H140 V102 Q140 112 130 112 Z" fill="#09090B" opacity="0.32"/>
+
+    <path d="M52 106 L100 162 M100 118 L100 162 M148 106 L100 162"
+          stroke="#FAFAFA" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+    <path d="M68 162 H132 V186 C132 201 119 210 100 217 C81 210 68 201 68 186 Z" fill="#DC2626"/>
+    <path d="M132 162 V186 C132 201 119 210 100 217 V162 Z" fill="#09090B" opacity="0.22"/>
+  </g>
+
+  <text x="230" y="136" font-family="Segoe UI, system-ui, sans-serif" font-size="64"
+        font-weight="600" letter-spacing="4" fill="#FAFAFA">DON</text>
+
+  <text x="234" y="166" font-family="Segoe UI, system-ui, sans-serif" font-size="14"
+        font-weight="400" letter-spacing="7.5" fill="#FAFAFA" opacity="0.55">LAUNCHER</text>
+</svg>

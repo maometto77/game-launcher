@@ -14,9 +14,16 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>false</UseWindowsForms>
+    <!--
+      The namespace stays GameLauncher.Desktop while the product is Don. Renaming
+      a namespace across a hundred and fifty files is churn with real risk and no
+      user-visible gain; the assembly, the product name and the window title are
+      what anyone actually sees.
+    -->
     <RootNamespace>GameLauncher.Desktop</RootNamespace>
-    <AssemblyName>GameLauncher.Desktop</AssemblyName>
-    <Description>Steam-style game launcher desktop client.</Description>
+    <AssemblyName>Don</AssemblyName>
+    <Description>Don — a launcher for a personal, locally-managed game library.</Description>
+    <ApplicationIcon>Resources\Branding\don.ico</ApplicationIcon>
 
     <!--
       Version stamped into the executable and shown at the foot of the sidebar.
@@ -24,8 +31,8 @@
       same number a published one does.
     -->
     <Version>1.0.0</Version>
-    <Company>GameLauncher</Company>
-    <Product>GameLauncher</Product>
+    <Company>Don</Company>
+    <Product>Don</Product>
 
     <!--
       Trimming is deliberately OFF, and this is the one production-build setting

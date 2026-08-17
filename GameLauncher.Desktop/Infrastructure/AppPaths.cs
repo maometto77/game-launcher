@@ -8,7 +8,7 @@ namespace GameLauncher.Desktop.Infrastructure;
 /// <remarks>
 /// <para>
 /// All writable state lives under
-/// <c>%LOCALAPPDATA%\GameLauncher</c>. Nothing is written next to the
+/// <c>%LOCALAPPDATA%\Don</c>. Nothing is written next to the
 /// executable, so the app works when installed to Program Files without needing
 /// elevation, and a roaming profile is not burdened with an artwork cache or a
 /// database.
@@ -78,11 +78,11 @@ public interface IAppPaths
 
 /// <summary>
 /// Default <see cref="IAppPaths"/> implementation rooted at
-/// <c>%LOCALAPPDATA%\GameLauncher</c>.
+/// <c>%LOCALAPPDATA%\Don</c>.
 /// </summary>
 public sealed class AppPaths : IAppPaths
 {
-    private const string AppFolderName = "GameLauncher";
+    private const string AppFolderName = "Don";
 
     /// <summary>
     /// Initialises a new instance rooted at the per-user local application data
