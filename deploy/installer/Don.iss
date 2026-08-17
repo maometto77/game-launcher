@@ -3,17 +3,17 @@
 ; Publish first, then compile this:
 ;
 ;   dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
-;   iscc deploy\installer\GameLauncher.iss
+;   iscc deploy\installer\Don.iss
 ;
-; Produces deploy\installer\output\GameLauncher-Setup-<version>.exe.
+; Produces deploy\installer\output\Don-Setup-<version>.exe.
 ;
 ; The published output is a single self-contained executable plus whatever is in
 ; tools\, so this installs a handful of files rather than a runtime.
 
-#define AppName        "GameLauncher"
+#define AppName        "Don"
 #define AppVersion     "1.0.0"
-#define AppPublisher   "GameLauncher"
-#define AppExeName     "GameLauncher.Desktop.exe"
+#define AppPublisher   "Don"
+#define AppExeName     "Don.exe"
 #define PublishDir     "..\..\GameLauncher.Desktop\bin\publish\win-x64"
 
 [Setup]
@@ -35,7 +35,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 PrivilegesRequired=lowest
 
 OutputDir=output
-OutputBaseFilename=GameLauncher-Setup-{#AppVersion}
+OutputBaseFilename=Don-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 
@@ -48,7 +48,7 @@ ArchitecturesInstallIn64BitMode=x64compatible
 
 UninstallDisplayIcon={app}\{#AppExeName}
 LicenseFile=
-SetupIconFile=
+SetupIconFile=..\..\GameLauncher.Desktop\Resources\Branding\don.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

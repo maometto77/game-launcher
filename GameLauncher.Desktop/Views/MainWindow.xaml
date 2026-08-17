@@ -6,7 +6,7 @@
         xmlns:models="clr-namespace:GameLauncher.Desktop.Models"
         xmlns:viewModels="clr-namespace:GameLauncher.Desktop.ViewModels"
         xmlns:views="clr-namespace:GameLauncher.Desktop.Views"
-        Title="GameLauncher"
+        Title="Don"
         Width="1280"
         Height="800"
         MinWidth="940"
@@ -36,7 +36,7 @@
                 <StackPanel Grid.Row="0" Margin="16,20,16,18">
                     <TextBlock Foreground="{StaticResource TextPrimaryBrush}"
                                Style="{StaticResource TitleTextStyle}"
-                               Text="GameLauncher" />
+                               Text="Don" />
                     <TextBlock Margin="0,2,0,0"
                                Style="{StaticResource CaptionTextStyle}"
                                Text="Local library" />

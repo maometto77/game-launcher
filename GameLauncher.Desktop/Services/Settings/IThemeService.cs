@@ -88,10 +88,23 @@ public sealed class ThemeService : IThemeService
         _logger.LogInformation("Applied the {Theme} theme.", theme);
     }
 
+    /// <summary>
+    /// Name of the assembly the palette dictionaries are compiled into.
+    /// </summary>
+    /// <remarks>
+    /// Read from the assembly rather than written out, because a pack URI names
+    /// the assembly and a hardcoded one silently stops resolving the moment
+    /// <c>AssemblyName</c> changes — which it did, when the product was named.
+    /// The failure is a missing-assembly exception at the first theme change,
+    /// nowhere near the property that caused it.
+    /// </remarks>
+    private static readonly string AssemblyName =
+        typeof(ThemeService).Assembly.GetName().Name ?? "Don";
+
     /// <summary>Builds the pack URI of a theme's palette dictionary.</summary>
     /// <param name="theme">The theme to locate.</param>
     /// <returns>An absolute pack URI.</returns>
     private static Uri BuildUri(AppTheme theme) => new(
-        $"pack://application:,,,/GameLauncher.Desktop;component/Resources/Theme/Palette.{theme}.xaml",
+        $"pack://application:,,,/{AssemblyName};component/Resources/Theme/Palette.{theme}.xaml",
         UriKind.Absolute);
 }
