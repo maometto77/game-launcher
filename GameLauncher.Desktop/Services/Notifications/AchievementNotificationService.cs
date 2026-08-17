@@ -1,4 +1,5 @@
 using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Achievements.Emulators;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -37,6 +38,7 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
     private const int BacklogThreshold = 3;
 
     private readonly IAchievementEngine _engine;
+    private readonly IAchievementWatcherService _watcher;
     private readonly ILogger<AchievementNotificationService> _logger;
 
     // A plain object rather than System.Threading.Lock, which is .NET 9 and later.
@@ -53,14 +55,22 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
-    /// <param name="engine">Raises the unlock events this service announces.</param>
+    /// <param name="engine">Raises the unlock events for catalogue achievements.</param>
+    /// <param name="watcher">Raises them for achievements read off the disk.</param>
     /// <param name="logger">Logger for announcement diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
+    /// <remarks>
+    /// Two publishers, one queue. Announcements have to be ordered and spaced
+    /// against each other or a catalogue unlock and an emulator unlock arriving
+    /// together would draw two toasts on top of one another.
+    /// </remarks>
     public AchievementNotificationService(
         IAchievementEngine engine,
+        IAchievementWatcherService watcher,
         ILogger<AchievementNotificationService> logger)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _watcher = watcher ?? throw new ArgumentNullException(nameof(watcher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -114,6 +124,7 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
     {
         _lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _engine.AchievementUnlocked += OnAchievementUnlocked;
+        _watcher.AchievementUnlocked += OnExternalAchievementUnlocked;
 
         return Task.CompletedTask;
     }
@@ -122,6 +133,8 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _engine.AchievementUnlocked -= OnAchievementUnlocked;
+        _watcher.AchievementUnlocked -= OnExternalAchievementUnlocked;
+
         _lifetime?.Cancel();
 
         return Task.CompletedTask;
@@ -158,9 +171,29 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
     /// The engine raises this only on the transition from locked to unlocked, so
     /// repeated evaluation of an achievement that stays earned queues nothing.
     /// </remarks>
-    private void OnAchievementUnlocked(object? sender, AchievementUnlockedEventArgs e)
+    private void OnAchievementUnlocked(object? sender, AchievementUnlockedEventArgs e) =>
+        Enqueue(AchievementNotification.FromDefinition(e.Definition, e.Game, e.UnlockedAt));
+
+    /// <summary>
+    /// Queues an achievement read from a local achievement file.
+    /// </summary>
+    /// <param name="sender">The watcher.</param>
+    /// <param name="e">The achievement that was earned.</param>
+    /// <remarks>
+    /// The watcher raises this only for the transition from locked to unlocked,
+    /// so re-reading a file that says the same thing as last time announces
+    /// nothing — which matters, because these files are rewritten in full on
+    /// every save.
+    /// </remarks>
+    private void OnExternalAchievementUnlocked(object? sender, ExternalAchievementUnlockedEventArgs e) =>
+        Enqueue(AchievementNotification.FromExternal(e.Achievement, e.Game, e.DisplayName));
+
+    /// <summary>
+    /// Adds an announcement to the queue and starts the pump if it is idle.
+    /// </summary>
+    /// <param name="notification">What to announce.</param>
+    private void Enqueue(AchievementNotification notification)
     {
-        var notification = new AchievementNotification(e.Definition, e.Game, e.UnlockedAt);
         var lifetime = _lifetime?.Token ?? CancellationToken.None;
 
         bool start;
@@ -229,8 +262,8 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
                 }
 
                 _logger.LogDebug(
-                    "Announcing achievement {ApiName} with {Pending} queued behind it.",
-                    next.Definition.ApiName, pending);
+                    "Announcing achievement {Title} with {Pending} queued behind it.",
+                    next.Title, pending);
 
                 await DwellAsync(pending, lifetime).ConfigureAwait(false);
             }
@@ -331,6 +364,7 @@ public sealed class AchievementNotificationService : IAchievementNotificationSer
         _disposed = true;
 
         _engine.AchievementUnlocked -= OnAchievementUnlocked;
+        _watcher.AchievementUnlocked -= OnExternalAchievementUnlocked;
 
         _lifetime?.Cancel();
         _lifetime?.Dispose();

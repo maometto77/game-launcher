@@ -1594,3 +1594,92 @@ off the stub's command line, binds it, and answers, which is the same path a rea
 aria2c would take. What remains untested is aria2's own behaviour: whether its
 `connections` figure means what the documentation says during a real swarm, and
 how quickly `numSeeders` settles.
+
+## 19. Save-path gaps, and achievements read off the disk
+
+Two of the gaps the Hydra comparison named, closed, plus the local achievement
+pipeline that comparison recommended.
+
+### 19.1 `<storeUserId>` is answered by the disk, not by a session
+
+Ludusavi resolves this placeholder from a signed-in store session. This launcher
+has none, so rules like `<winAppData>/Sekiro/<storeUserId>/S0000.sl2` were
+returning null — a whole class of games with no save location at all.
+
+The answer is already on disk: the folder is named after the account that
+created it. `StoreUserIdProbe` lists the one directory the placeholder sits in
+and keeps names shaped like an account — 17 digits for a Steam64, a shorter run
+for the 32-bit account id `userdata` folders use, or a long alphanumeric token
+for an emulator profile. Names that sit beside accounts without being one
+(`common`, `config`, `remote`) are excluded by name, because they pass the shape
+test.
+
+**Every match is returned, not the first.** A machine with two accounts has two
+real save folders, and picking one would silently hide the other's progress.
+
+The expander stays pure. It gained `ExpandRetainingStoreUserId`, which resolves
+everything else and leaves this placeholder standing, because the directory to
+list is only known once everything to its left has been expanded. The probe —
+the only part that touches the file system — lives on its own.
+
+### 19.2 Form C, at the boundary
+
+`Café` can be stored as one code point or as `Cafe` plus a combining acute.
+Windows writes the first; several installers and extractors write the second.
+They are not equal in .NET, so a scan comparing raw strings reported the save as
+changed on every pass, for every game with an accent in its path.
+
+`SavePathNormalizer` canonicalises to form C — the shorter form, and what
+Windows produces, so the common case is already canonical and costs nothing. It
+is applied where paths *leave* the expander rather than at each comparison, so
+everything downstream is already canonical, and it supplies an
+`IEqualityComparer<string>` that the resolver now keys its de-duplication on.
+
+### 19.3 Achievements are observed, not awarded
+
+`IAchievementWatcherService` watches the folders Steam emulators write to —
+Goldberg's saves folder, the RUNE and CODEX folders under Public Documents, and
+anything else configured — and reads `achievements.json`, `achievements.ini` and
+`stats.ini` when they settle.
+
+**These rows do not go into `AchievementDefinition`.** That table is curated:
+authored, synchronised through the relay, evaluated by providers this launcher
+controls. These are observations of what another program wrote to a file —
+unauthored, never synchronised, true only of this machine. Letting a file on
+disk mint catalogue rows would put third-party content into the sync path and
+make a catalogue row's provenance unknowable. They live in their own table and
+appear in their own section on the game details page.
+
+Four decisions worth recording:
+
+- **Only transitions are announced.** These files are rewritten in full on every
+  save, so announcing every unlocked achievement in one would fire a toast per
+  achievement, every time the game saves. The repository returns what changed
+  from locked to unlocked, and that alone reaches the toast queue.
+- **State never goes backwards.** A restored save, or an emulator rewriting a
+  file it has lost track of, must not un-earn something the user has been told
+  they got.
+- **The format is inferred from the content, not the file name** — at least one
+  writer ships JSON in a file called `.ini`.
+- **Zero is not a timestamp.** These writers use `0` for "never"; read as Unix
+  time it would claim the achievement was earned in 1970.
+
+`Game` gained a `SteamAppId` because that is the only key these files carry:
+without it, a folder named `480` cannot be connected to a library entry called
+`Spacewar` by anything better than a title guess.
+
+### 19.4 A rename
+
+The existing `AchievementWatcherService` scheduled evaluation — it decided
+*when* providers run and watched nothing. It is now `AchievementScheduler`,
+which is what it does, freeing the name for the service that actually watches
+files.
+
+### 19.5 A pre-existing test-host instability, not caused by this round
+
+The suite intermittently ends with "Test host process crashed" after every test
+has completed. This was verified against the previous commit with these changes
+stashed, where it reproduced (476 passed then aborted, then a clean 493 on the
+next run), so it predates this work. Three consecutive runs on this branch
+passed 529 cleanly. Worth chasing separately; it is a teardown fault rather than
+a failing test.

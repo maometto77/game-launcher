@@ -67,6 +67,18 @@ public sealed class Game
     /// </remarks>
     public string? ListingId { get; set; }
 
+    /// <summary>
+    /// Steam application id, when this game has one.
+    /// </summary>
+    /// <remarks>
+    /// The only key a local achievement file carries. Emulator save folders are
+    /// named after it, so without this a folder called <c>480</c> cannot be
+    /// connected to a library entry called <c>Spacewar</c> by anything better
+    /// than guessing at the title. Read from a <c>steam_appid.txt</c> beside the
+    /// executable when there is one, and editable when there is not.
+    /// </remarks>
+    public int? SteamAppId { get; set; }
+
     /// <summary>Display title shown throughout the UI.</summary>
     public string Title { get; set; } = string.Empty;
 

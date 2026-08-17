@@ -5,6 +5,7 @@ using GameLauncher.Desktop.Helpers;
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Achievements.Emulators;
 using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
@@ -22,6 +23,8 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     private readonly IGameRepository _games;
     private readonly IAchievementRepository _achievements;
     private readonly IAchievementEngine _engine;
+    private readonly IExternalAchievementRepository _external;
+    private readonly IAchievementWatcherService _watcher;
     private readonly IArtworkService _artwork;
     private readonly IPlaySessionRepository _sessions;
     private readonly ILibraryService _library;
@@ -38,6 +41,15 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
 
     [ObservableProperty]
     private ObservableCollection<AchievementItemViewModel> _achievementItems = [];
+
+    [ObservableProperty]
+    private ObservableCollection<ExternalAchievementItemViewModel> _externalAchievementItems = [];
+
+    [ObservableProperty]
+    private string _externalAchievementSummary = string.Empty;
+
+    [ObservableProperty]
+    private bool _hasExternalAchievements;
 
     [ObservableProperty]
     private string _notes = string.Empty;
@@ -81,6 +93,8 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     /// <param name="games">Game persistence.</param>
     /// <param name="achievements">Achievement persistence.</param>
     /// <param name="engine">Consulted only for which providers are installed.</param>
+    /// <param name="external">Achievements observed in local achievement files.</param>
+    /// <param name="watcher">Names the writers those observations came from.</param>
     /// <param name="artwork">Finds and applies cover and background images.</param>
     /// <param name="sessions">Play session persistence.</param>
     /// <param name="library">Library application logic.</param>
@@ -93,6 +107,8 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         IGameRepository games,
         IAchievementRepository achievements,
         IAchievementEngine engine,
+        IExternalAchievementRepository external,
+        IAchievementWatcherService watcher,
         IArtworkService artwork,
         IPlaySessionRepository sessions,
         ILibraryService library,
@@ -104,6 +120,8 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         _games = games ?? throw new ArgumentNullException(nameof(games));
         _achievements = achievements ?? throw new ArgumentNullException(nameof(achievements));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _external = external ?? throw new ArgumentNullException(nameof(external));
+        _watcher = watcher ?? throw new ArgumentNullException(nameof(watcher));
         _artwork = artwork ?? throw new ArgumentNullException(nameof(artwork));
         _sessions = sessions ?? throw new ArgumentNullException(nameof(sessions));
         _library = library ?? throw new ArgumentNullException(nameof(library));
@@ -194,6 +212,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
             SessionCountText = sessionCount == 1 ? "1 session" : $"{sessionCount} sessions";
 
             await LoadAchievementsAsync(game.CatalogId, cancellationToken).ConfigureAwait(true);
+            await LoadExternalAchievementsAsync(game.SteamAppId, cancellationToken).ConfigureAwait(true);
 
             OnPropertyChanged(nameof(CanPlay));
             PlayCommand.NotifyCanExecuteChanged();
@@ -258,6 +277,62 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         AchievementSummary = items.Count == 0
             ? "No achievements configured"
             : $"{unlocked} of {items.Count} unlocked";
+    }
+
+    /// <summary>
+    /// Loads the achievements a local achievement file recorded for this game.
+    /// </summary>
+    /// <param name="steamAppId">The game's Steam application id, if it has one.</param>
+    /// <param name="cancellationToken">Cancels the load.</param>
+    /// <remarks>
+    /// <para>
+    /// Shown as its own section rather than merged with the catalogue's. These
+    /// are another program's records, keyed by an API name rather than a title,
+    /// and presenting them as though the launcher had awarded them would
+    /// misrepresent where they came from.
+    /// </para>
+    /// <para>
+    /// A game with no Steam id has nothing to look up — these files are named
+    /// after that id and carry no other key — so the section is simply absent
+    /// rather than empty.
+    /// </para>
+    /// </remarks>
+    private async Task LoadExternalAchievementsAsync(int? steamAppId, CancellationToken cancellationToken)
+    {
+        if (steamAppId is not > 0)
+        {
+            ExternalAchievementItems = [];
+            ExternalAchievementSummary = string.Empty;
+            HasExternalAchievements = false;
+            return;
+        }
+
+        var rows = await _external.GetForAppAsync(steamAppId.Value, cancellationToken).ConfigureAwait(true);
+
+        var names = _watcher.WatchedRoots
+            .GroupBy(root => root.SourceKey, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().DisplayName, StringComparer.OrdinalIgnoreCase);
+
+        var items = rows
+            .Select(row => new ExternalAchievementItemViewModel(row, names.GetValueOrDefault(row.SourceKey)))
+
+            // Unlocked first, then anything with progress, then the rest. A
+            // statistic is context for the others and sorts last.
+            .OrderByDescending(item => item.IsUnlocked)
+            .ThenByDescending(item => item.HasProgress)
+            .ThenBy(item => item.IsStatistic)
+            .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+
+        ExternalAchievementItems = new ObservableCollection<ExternalAchievementItemViewModel>(items);
+        HasExternalAchievements = items.Count > 0;
+
+        var earned = items.Count(item => item.IsUnlocked);
+        var achievements = items.Count(item => !item.IsStatistic);
+
+        ExternalAchievementSummary = achievements == 0
+            ? $"{items.Count} statistic(s) recorded"
+            : $"{earned} of {achievements} unlocked";
     }
 
     /// <summary>Launches the game.</summary>

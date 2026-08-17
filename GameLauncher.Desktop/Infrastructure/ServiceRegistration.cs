@@ -1,5 +1,6 @@
 using GameLauncher.Desktop.Infrastructure.Navigation;
 using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Achievements.Emulators;
 using GameLauncher.Desktop.Services.Achievements.Providers;
 using GameLauncher.Desktop.Services.Artwork;
 using GameLauncher.Desktop.Services.Catalog;
@@ -97,10 +98,19 @@ public static class ServiceRegistration
         // Migrates the schema before the shell window is shown.
         services.AddHostedService<DatabaseStartupService>();
 
+        // Reads the achievement files Steam emulators leave on disk. Registered
+        // before the notifier because the notifier subscribes to it, and as one
+        // object in two roles so the interface and the hosted lifetime are the
+        // same instance rather than two watchers over the same folders.
+        services.AddSingleton<AchievementWatcherService>();
+        services.AddSingleton<IAchievementWatcherService>(
+            provider => provider.GetRequiredService<AchievementWatcherService>());
+        services.AddHostedService(provider => provider.GetRequiredService<AchievementWatcherService>());
+
         // One object in two roles: the notifier the toast overlay binds to, and a
-        // hosted service so it is subscribed to the engine before the watcher
-        // below runs its startup pass. Subscribing later would silently drop any
-        // achievement that pass earns.
+        // hosted service so it is subscribed to both publishers before either
+        // runs its startup pass. Subscribing later would silently drop any
+        // achievement those passes find.
         services.AddSingleton<AchievementNotificationService>();
         services.AddSingleton<IAchievementNotificationService>(
             provider => provider.GetRequiredService<AchievementNotificationService>());
@@ -108,7 +118,7 @@ public static class ServiceRegistration
 
         // Decides when evaluation runs. Kept separate from the engine so that
         // scheduling can change without touching a single rule.
-        services.AddHostedService<AchievementWatcherService>();
+        services.AddHostedService<AchievementScheduler>();
 
         // Registration, connection and sync all depend on settings and the
         // database already being ready. Nothing here can block startup.
@@ -328,6 +338,7 @@ public static class ServiceRegistration
         services.AddSingleton<IGameRepository, GameRepository>();
         services.AddSingleton<ICollectionRepository, CollectionRepository>();
         services.AddSingleton<IAchievementRepository, AchievementRepository>();
+        services.AddSingleton<IExternalAchievementRepository, ExternalAchievementRepository>();
         services.AddSingleton<IFriendCacheRepository, FriendCacheRepository>();
         services.AddSingleton<IPlaySessionRepository, PlaySessionRepository>();
 

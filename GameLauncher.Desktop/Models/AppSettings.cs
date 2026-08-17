@@ -238,6 +238,25 @@ public sealed record AppSettings
     public bool Aria2Enabled { get; init; }
 
     /// <summary>
+    /// Extra directories to watch for local achievement files.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Added to the three the launcher already knows — Goldberg's saves folder
+    /// and the RUNE and CODEX folders under Public Documents — rather than
+    /// replacing them. Each must be a directory holding one folder per Steam
+    /// application id, because that folder name is the only place the id appears.
+    /// </para>
+    /// <para>
+    /// Exists because these locations are conventions rather than standards, and
+    /// the next writer to appear will invent a fourth. A setting means that costs
+    /// the user a path rather than a release.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("achievementWatchRoots")]
+    public IReadOnlyList<string> AchievementWatchRoots { get; init; } = [];
+
+    /// <summary>
     /// Full path to <c>aria2c</c>, or <see langword="null"/> to find it on the
     /// system path.
     /// </summary>

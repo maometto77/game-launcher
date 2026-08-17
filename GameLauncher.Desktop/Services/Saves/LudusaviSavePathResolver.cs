@@ -94,38 +94,39 @@ public sealed class LudusaviSavePathResolver : ISavePathResolver
 
         var locations = new List<SaveLocation>();
 
+        // Keyed on the normalised path, so two rules resolving to the same folder
+        // — which happens whenever a game lists both its save directory and a
+        // file inside it — are reported once.
+        var seen = new HashSet<string>(SavePathNormalizer.Comparer);
+
+        var steamAppId = entry.SteamAppId?.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         foreach (var candidate in entry.Locations)
         {
-            var expanded = candidate.Kind == SaveLocationKind.Registry
-                ? candidate.Template
-                : LudusaviPathExpander.Expand(
-                    candidate.Template,
-                    query.InstallDirectory,
-                    entry.SteamAppId?.ToString(System.Globalization.CultureInfo.InvariantCulture));
-
-            if (expanded is null)
+            foreach (var expanded in ExpandCandidate(candidate, query, steamAppId))
             {
-                // A path this machine cannot resolve — usually one relative to an
-                // install directory the caller did not supply.
-                continue;
+                var exists = candidate.Kind switch
+                {
+                    SaveLocationKind.Registry => true,
+                    _ => File.Exists(expanded) || Directory.Exists(expanded)
+                };
+
+                if (!exists && !query.IncludeMissing)
+                {
+                    continue;
+                }
+
+                if (!seen.Add(expanded))
+                {
+                    continue;
+                }
+
+                var kind = candidate.Kind == SaveLocationKind.Registry
+                    ? SaveLocationKind.Registry
+                    : Directory.Exists(expanded) ? SaveLocationKind.Directory : SaveLocationKind.File;
+
+                locations.Add(new SaveLocation(expanded, kind, candidate.Tags, exists));
             }
-
-            var exists = candidate.Kind switch
-            {
-                SaveLocationKind.Registry => true,
-                _ => File.Exists(expanded) || Directory.Exists(expanded)
-            };
-
-            if (!exists && !query.IncludeMissing)
-            {
-                continue;
-            }
-
-            var kind = candidate.Kind == SaveLocationKind.Registry
-                ? SaveLocationKind.Registry
-                : Directory.Exists(expanded) ? SaveLocationKind.Directory : SaveLocationKind.File;
-
-            locations.Add(new SaveLocation(expanded, kind, candidate.Tags, exists));
         }
 
         // Save-tagged first: a caller taking only the first location should get
@@ -136,6 +137,58 @@ public sealed class LudusaviSavePathResolver : ISavePathResolver
             .ToArray();
 
         return new SavePathResult(entry.Title, ordered);
+    }
+
+    /// <summary>
+    /// Turns one manifest rule into the paths it names on this machine.
+    /// </summary>
+    /// <param name="candidate">The rule.</param>
+    /// <param name="query">What was asked about.</param>
+    /// <param name="steamAppId">The manifest's Steam id for the game, if it has one.</param>
+    /// <returns>
+    /// Zero paths when the rule cannot be resolved, one for an ordinary rule, and
+    /// one per account for a <c>&lt;storeUserId&gt;</c> rule.
+    /// </returns>
+    /// <remarks>
+    /// A rule naming an account folder describes as many real locations as there
+    /// are accounts on the machine. Returning only the first would hide a second
+    /// profile's progress entirely, which is the one mistake a save feature must
+    /// not make.
+    /// </remarks>
+    private static IEnumerable<string> ExpandCandidate(
+        ManifestLocation candidate,
+        SavePathQuery query,
+        string? steamAppId)
+    {
+        if (candidate.Kind == SaveLocationKind.Registry)
+        {
+            return [candidate.Template];
+        }
+
+        if (!candidate.Template.Contains(StoreUserIdProbe.Placeholder, StringComparison.Ordinal))
+        {
+            return LudusaviPathExpander.Expand(candidate.Template, query.InstallDirectory, steamAppId)
+                is { } expanded
+                ? [expanded]
+
+                // Usually a path relative to an install directory the caller did
+                // not supply.
+                : [];
+        }
+
+        var partial = LudusaviPathExpander.ExpandRetainingStoreUserId(
+            candidate.Template, query.InstallDirectory, steamAppId);
+
+        if (partial is null)
+        {
+            return [];
+        }
+
+        return StoreUserIdProbe.Discover(partial)
+            .Select(accountId => LudusaviPathExpander.Expand(
+                candidate.Template, query.InstallDirectory, steamAppId, accountId))
+            .OfType<string>()
+            .ToArray();
     }
 
     /// <inheritdoc />

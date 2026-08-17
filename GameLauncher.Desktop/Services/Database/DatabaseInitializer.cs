@@ -748,6 +748,54 @@ public sealed class DatabaseInitializer : IDatabaseInitializer
         ALTER TABLE Game ADD COLUMN ListingId TEXT NULL REFERENCES CatalogListing (ListingId) ON DELETE SET NULL;
 
         CREATE INDEX IF NOT EXISTS IX_Game_ListingId ON Game (ListingId);
+        """,
+
+        // v8 — achievements observed on disk.
+        //
+        // Kept apart from AchievementDefinition on purpose. That table is a
+        // curated catalogue: rows are authored, synchronised through the relay,
+        // and evaluated by providers this launcher controls. These rows are
+        // observations of what some other program wrote to a file — unauthored,
+        // never synchronised, and true only of this machine. Letting a file on
+        // disk write into the curated table would put third-party content into
+        // the sync path and make a catalogue row's provenance unknowable.
+        //
+        // Identity is source, application and API name together, so the same game
+        // played under two emulators keeps two independent records rather than one
+        // overwriting the other.
+        //
+        // Game gains a Steam application id because that is the only key these
+        // files carry. Without it a folder called "480" on disk cannot be
+        // connected to a library entry called "Spacewar" by anything better than
+        // a title guess.
+        """
+        CREATE TABLE IF NOT EXISTS ExternalAchievement (
+            Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            SourceKey     TEXT    NOT NULL,
+            SteamAppId    INTEGER NOT NULL,
+            ApiName       TEXT    NOT NULL,
+            Kind          INTEGER NOT NULL DEFAULT 0,
+            IsUnlocked    INTEGER NOT NULL DEFAULT 0,
+            UnlockedAt    TEXT    NULL,
+            CurrentValue  REAL    NULL,
+            TargetValue   REAL    NULL,
+            SourcePath    TEXT    NOT NULL DEFAULT '',
+            ObservedAt    TEXT    NOT NULL,
+
+            UNIQUE (SourceKey, SteamAppId, ApiName)
+        );
+
+        -- The lookup the game details page makes: everything for one application.
+        CREATE INDEX IF NOT EXISTS IX_ExternalAchievement_App
+            ON ExternalAchievement (SteamAppId);
+
+        -- Recently earned, for the "what did I just unlock" query.
+        CREATE INDEX IF NOT EXISTS IX_ExternalAchievement_Unlocked
+            ON ExternalAchievement (IsUnlocked, UnlockedAt DESC);
+
+        ALTER TABLE Game ADD COLUMN SteamAppId INTEGER NULL;
+
+        CREATE INDEX IF NOT EXISTS IX_Game_SteamAppId ON Game (SteamAppId);
         """
     ];
 

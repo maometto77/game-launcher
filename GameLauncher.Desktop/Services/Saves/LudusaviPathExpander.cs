@@ -27,8 +27,59 @@ public static partial class LudusaviPathExpander
     /// <param name="template">The path as the manifest writes it.</param>
     /// <param name="installDirectory">Where the game is installed, or <see langword="null"/>.</param>
     /// <param name="storeGameId">Store identifier, for <c>&lt;storeGameId&gt;</c>.</param>
+    /// <param name="storeUserId">
+    /// Account identifier, for <c>&lt;storeUserId&gt;</c>. Supplied by
+    /// <see cref="StoreUserIdProbe"/> after reading the disk, because this
+    /// launcher has no store session to ask.
+    /// </param>
     /// <returns>An absolute path, or <see langword="null"/> when it cannot be resolved.</returns>
-    public static string? Expand(string template, string? installDirectory, string? storeGameId = null)
+    public static string? Expand(
+        string template,
+        string? installDirectory,
+        string? storeGameId = null,
+        string? storeUserId = null) =>
+        ExpandCore(template, installDirectory, storeGameId, storeUserId, retainStoreUserId: false);
+
+    /// <summary>
+    /// Expands everything except <c>&lt;storeUserId&gt;</c>, which is left in
+    /// place.
+    /// </summary>
+    /// <param name="template">The path as the manifest writes it.</param>
+    /// <param name="installDirectory">Where the game is installed, or <see langword="null"/>.</param>
+    /// <param name="storeGameId">Store identifier, for <c>&lt;storeGameId&gt;</c>.</param>
+    /// <returns>
+    /// The partly expanded path, or <see langword="null"/> when some *other*
+    /// placeholder could not be resolved.
+    /// </returns>
+    /// <remarks>
+    /// The step before probing the disk. An account id cannot be known without
+    /// listing the directory it lives in, and that directory's path is only known
+    /// once everything to its left has been expanded — so this produces the
+    /// input <see cref="StoreUserIdProbe.Discover"/> needs while keeping this
+    /// class free of file system access.
+    /// </remarks>
+    public static string? ExpandRetainingStoreUserId(
+        string template,
+        string? installDirectory,
+        string? storeGameId = null) =>
+        ExpandCore(template, installDirectory, storeGameId, storeUserId: null, retainStoreUserId: true);
+
+    /// <summary>Performs the expansion.</summary>
+    /// <param name="template">The path as the manifest writes it.</param>
+    /// <param name="installDirectory">Where the game is installed, or <see langword="null"/>.</param>
+    /// <param name="storeGameId">Store identifier.</param>
+    /// <param name="storeUserId">Account identifier, when one is known.</param>
+    /// <param name="retainStoreUserId">
+    /// Whether an unresolved <c>&lt;storeUserId&gt;</c> should survive rather than
+    /// failing the expansion.
+    /// </param>
+    /// <returns>The expanded path, or <see langword="null"/>.</returns>
+    private static string? ExpandCore(
+        string template,
+        string? installDirectory,
+        string? storeGameId,
+        string? storeUserId,
+        bool retainStoreUserId)
     {
         if (string.IsNullOrWhiteSpace(template))
         {
@@ -86,10 +137,22 @@ public static partial class LudusaviPathExpander
             value = value.Replace("<storeGameId>", storeGameId, StringComparison.Ordinal);
         }
 
-        // Anything left is a placeholder this machine cannot answer —
-        // <storeUserId> without a store account, or <base> with no install
-        // directory. A path containing one is unusable, not nearly usable.
-        if (UnresolvedPlaceholder().IsMatch(value))
+        if (storeUserId is { Length: > 0 })
+        {
+            value = value.Replace(StoreUserIdProbe.Placeholder, storeUserId, StringComparison.Ordinal);
+        }
+
+        // Anything left is a placeholder this machine cannot answer — <base> with
+        // no install directory, or a <storeUserId> nothing on disk matched. A
+        // path containing one is unusable, not nearly usable.
+        //
+        // The one exception is the caller that is about to go and look the
+        // account id up, which needs the marker intact to know where to look.
+        var remaining = retainStoreUserId
+            ? value.Replace(StoreUserIdProbe.Placeholder, string.Empty, StringComparison.Ordinal)
+            : value;
+
+        if (UnresolvedPlaceholder().IsMatch(remaining))
         {
             return null;
         }
@@ -132,14 +195,20 @@ public static partial class LudusaviPathExpander
             : configured.Replace('\\', '/');
     }
 
-    /// <summary>Collapses duplicate separators and applies the platform's own.</summary>
+    /// <summary>Collapses duplicate separators, applies the platform's own, and canonicalises the text.</summary>
     /// <param name="value">The expanded path.</param>
-    /// <returns>A tidy path.</returns>
+    /// <returns>A tidy path in Unicode form C.</returns>
+    /// <remarks>
+    /// Form C is applied here rather than by the caller so every path leaving
+    /// this class is already canonical. A game whose folder carries an accent
+    /// would otherwise compare unequal to the same folder read back off the
+    /// disk, and every scan would report it as changed.
+    /// </remarks>
     private static string NormaliseSeparators(string value)
     {
         var collapsed = DuplicateSeparators().Replace(value, "/");
 
-        return OperatingSystem.IsWindows() ? collapsed.Replace('/', '\\') : collapsed;
+        return SavePathNormalizer.Normalize(collapsed);
     }
 
     /// <summary>Matches any remaining angle-bracket placeholder.</summary>

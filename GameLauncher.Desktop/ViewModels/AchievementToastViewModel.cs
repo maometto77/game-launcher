@@ -24,9 +24,9 @@ public sealed class AchievementToastViewModel
     {
         ArgumentNullException.ThrowIfNull(notification);
 
-        Title = notification.Definition.Title;
-        Description = notification.Definition.Description;
-        IconPath = notification.Definition.IconPath;
+        Title = notification.Title;
+        Description = notification.Description;
+        IconPath = notification.IconPath;
         GameTitle = notification.Game?.Title;
     }
 

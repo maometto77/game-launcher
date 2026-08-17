@@ -435,7 +435,7 @@ public sealed class DialogSmokeTests
         using var viewModel = new AchievementToastHostViewModel(notifications, new ImmediateDispatcher());
 
         notifications.Publish(
-            new AchievementNotification(
+            AchievementNotification.FromDefinition(
                 new AchievementDefinition
                 {
                     Id = 1,

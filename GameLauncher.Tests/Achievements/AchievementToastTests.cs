@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Achievements;
+using GameLauncher.Desktop.Services.Achievements.Emulators;
 using GameLauncher.Desktop.Services.Achievements.Configuration;
 using GameLauncher.Desktop.Services.Achievements.Providers;
 using GameLauncher.Desktop.Services.Catalog;
@@ -223,7 +224,9 @@ public sealed class AchievementToastTests
             NullLogger<AchievementEngine>.Instance);
 
         var service = new AchievementNotificationService(
-            engine, NullLogger<AchievementNotificationService>.Instance)
+            engine,
+            host.Resolve<IAchievementWatcherService>(),
+            NullLogger<AchievementNotificationService>.Instance)
         {
             Dwell = TestDwell,
             BacklogDwellTime = TestDwell
@@ -367,8 +370,8 @@ public sealed class AchievementToastTests
 
             lock (_gate)
             {
-                _announced.Add(e.Current.Definition.ApiName);
-                _snapshots.Add((e.Current.Definition.ApiName, e.PendingCount));
+                _announced.Add(e.Current.Title);
+                _snapshots.Add((e.Current.Title, e.PendingCount));
             }
         }
 
