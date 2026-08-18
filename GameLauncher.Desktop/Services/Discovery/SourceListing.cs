@@ -80,11 +80,19 @@ public sealed record ListingDownloadRef
 
     /// <summary>SHA-1 digest as hex, or <see langword="null"/>.</summary>
     /// <remarks>
-    /// Preferred over <see cref="Md5"/> when both are present. Both lengths are
-    /// recognised by <see cref="Download.ChecksumAlgorithm.Auto"/>, so either
-    /// flows into the existing download path unchanged.
+    /// Preferred over <see cref="Md5"/> when both are present. Every length here
+    /// is recognised by <see cref="Download.ChecksumAlgorithm.Auto"/>, so any of
+    /// them flows into the existing download path unchanged.
     /// </remarks>
     public string? Sha1 { get; init; }
+
+    /// <summary>SHA-256 digest as hex, or <see langword="null"/>.</summary>
+    /// <remarks>
+    /// Strongest of the three and preferred when present. Sources that publish
+    /// their own files can say this; the ones that mirror someone else's
+    /// generally cannot, which is why all three are carried rather than one.
+    /// </remarks>
+    public string? Sha256 { get; init; }
 
     /// <summary>Format label from the source, such as <c>ZIP</c>.</summary>
     public string? Format { get; init; }
@@ -98,7 +106,20 @@ public sealed record ListingDownloadRef
     public int MirrorRank { get; init; }
 
     /// <summary>Gets the strongest digest available, or <see langword="null"/> when there is none.</summary>
-    public string? BestChecksum => string.IsNullOrWhiteSpace(Sha1) ? Md5 : Sha1;
+    /// <remarks>
+    /// Strongest first. The download path infers the algorithm from the digest's
+    /// length, so which one this returns needs no further plumbing.
+    /// </remarks>
+    public string? BestChecksum
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Sha256)) { return Sha256; }
+            if (!string.IsNullOrWhiteSpace(Sha1)) { return Sha1; }
+
+            return string.IsNullOrWhiteSpace(Md5) ? null : Md5;
+        }
+    }
 }
 
 /// <summary>

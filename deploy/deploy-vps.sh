@@ -115,6 +115,38 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Served directories
+#
+# Created before the stack starts. A bind mount whose source does not exist is
+# created by Docker as a root-owned directory, which then cannot be written to
+# over SSH by the user publishing releases — a confusing failure a long way from
+# its cause.
+# ---------------------------------------------------------------------------
+DIST_DIR="${SCRIPT_DIR}/dist"
+FEED_DIR="${SCRIPT_DIR}/feed"
+
+for directory in "${DIST_DIR}" "${FEED_DIR}" "${FEED_DIR}/games"; do
+    if [[ ! -d "${directory}" ]]; then
+        log "Creating ${directory}"
+        mkdir -p "${directory}"
+    fi
+
+    # Owned by whoever invoked sudo, so publishing does not need root.
+    if [[ -n "${SUDO_USER:-}" ]]; then
+        chown -R "${SUDO_USER}:$(id -gn "${SUDO_USER}")" "${directory}"
+    fi
+
+    chmod 755 "${directory}"
+done
+
+# Needed by feed/build-feed.py. Present on every mainstream image, so this is a
+# check rather than an install.
+if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 is not installed, so feed/build-feed.py cannot run here."
+    warn "Install it with: apt-get install -y python3"
+fi
+
+# ---------------------------------------------------------------------------
 # Build and start
 # ---------------------------------------------------------------------------
 log "Building the relay image"
@@ -138,6 +170,19 @@ for attempt in $(seq 1 60); do
         echo "  Point the launcher at it:  Settings → Relay → https://${DOMAIN}"
         echo "  Logs:                      docker compose -f ${SCRIPT_DIR}/compose.yml logs -f"
         echo "  Update after a git pull:   ${SCRIPT_DIR}/deploy-vps.sh ${DOMAIN} ${ACME_EMAIL}"
+        echo
+        echo "  Releases are served from:  ${DIST_DIR}"
+        echo "  Send friends the link:     https://${DOMAIN}/download/"
+
+        if [[ -z "$(ls -A "${DIST_DIR}" 2>/dev/null)" ]]; then
+            echo "  (empty for now — publish one with installer/publish-release.ps1)"
+        fi
+
+        echo
+        echo "  Shared catalogue:          ${FEED_DIR}/games/"
+        echo "  Rebuild it after adding:   ${FEED_DIR}/build-feed.py"
+        echo "  Friends point Don at:      https://${DOMAIN}/feed/catalog.json"
+        echo "                             (Settings → Discovery → Shared catalogue)"
         echo
         exit 0
     fi

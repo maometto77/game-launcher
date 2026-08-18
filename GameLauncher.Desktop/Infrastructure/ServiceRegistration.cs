@@ -16,6 +16,7 @@ using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sourcing;
 using GameLauncher.Desktop.Services.Discovery.Sourcing.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources;
+using GameLauncher.Desktop.Services.Discovery.Sources.SharedCatalog;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Downloads;
 using GameLauncher.Desktop.Services.Friends;
@@ -207,6 +208,11 @@ public static class ServiceRegistration
         services.AddSingleton<ICatalogSource, InternetArchiveCatalogSource>();
         services.AddSingleton<ICatalogSource, MyAbandonwareCatalogSource>();
 
+        // The one source that is not somebody else's website: a document a group
+        // publishes for itself, usually beside the files it describes. Inert
+        // until a feed address is configured, so it costs nothing to register.
+        services.AddSingleton<ICatalogSource, SharedCatalogSource>();
+
         // Honouring robots.txt is what separates importing a catalogue from
         // taking whatever a server will serve. Shared, and cached per host.
         services.AddSingleton<IRobotsPolicy, RobotsPolicy>();
@@ -219,6 +225,16 @@ public static class ServiceRegistration
 
         services.AddHttpClient(MyAbandonwareCatalogSource.HttpClientName, client =>
         {
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
+        services.AddHttpClient(SharedCatalogSource.HttpClientName, client =>
+        {
+            // One request returns the whole catalogue, so this is generous where
+            // the per-item sources are not: a feed of several thousand entries is
+            // a large document, and it may be served by a small machine reading
+            // it off a disk that has spun down.
             client.Timeout = TimeSpan.FromSeconds(60);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
         });

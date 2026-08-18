@@ -14,8 +14,8 @@ everything except friends works offline.
 dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
 ```
 
-Produces one file — `bin/publish/win-x64/GameLauncher.Desktop.exe`, about 78 MB
-— that runs on a Windows machine with no .NET installed.
+Produces one file — `bin/publish/win-x64/Don.exe`, about 77 MB — that runs on a
+Windows machine with no .NET installed.
 
 > **Never publish into a directory that contains the source.** WPF compiles its
 > XAML markup pass through a generated temporary project, and if the output
@@ -57,23 +57,106 @@ a desktop application can do, and that the binary is well known does not change
 what the mechanism is.
 
 Where the launcher looks, in order: the configured path → beside the executable
-→ `tools/` → `%LOCALAPPDATA%\GameLauncher\tools\` → `PATH`. Each candidate is run
-with `--version` before it is accepted, because a file existing is not the same
-as a file working.
+→ `tools/` → `%LOCALAPPDATA%\Don\tools\` → `PATH`. Each candidate is run with
+`--version` before it is accepted, because a file existing is not the same as a
+file working.
 
-### Installer
+---
 
-```bash
-iscc deploy/installer/GameLauncher.iss
+## Giving it to someone else
+
+Three steps: build a release, put it on the VPS, send the link.
+
+### 1. Build
+
+```powershell
+.\deploy\installer\build-release.ps1
 ```
 
-Needs [Inno Setup 6](https://jrsoftware.org/isinfo.php). Produces
-`deploy/installer/output/GameLauncher-Setup-1.0.0.exe`. Installs per-user by
-default and per-machine when run elevated.
+Publishes, then stages and packages
+`deploy/installer/output/Don-<version>-win-x64.zip` — the executable, the install
+and uninstall scripts, and a README written for whoever receives it. Alongside it
+go a `.sha256` and a `release.json` carrying the version, size and hash.
 
-The uninstaller **asks** before removing your library, and defaults to keeping
-it. `settings.json` holds the only copy of your relay token — the relay stores a
-hash and cannot reissue it — so a silent delete would be unrecoverable.
+It checks the scripts before it builds anything. A PowerShell script is parsed in
+full before its first line runs, so one syntax error means it does nothing at
+all — discovered, in an uninstaller, by someone who now cannot remove the
+application. The check exists because exactly that happened: `"$InstallRoot:"` in
+a message parses as a drive-qualified variable reference and took the whole
+uninstaller down with it.
+
+Inno Setup is used **if it happens to be installed**, producing a conventional
+`Don-Setup-<version>.exe` as well. It is not required, and nothing is lost
+without it: the payload is one self-contained executable and two scripts, so
+there is nothing a setup program must do that a copy cannot.
+
+### 2. Publish
+
+```powershell
+.\deploy\installer\publish-release.ps1 -Server root@relay.example.com
+```
+
+Uploads over SSH to the `dist` directory that `compose.yml` mounts into Caddy,
+then verifies twice: the VPS re-checks the SHA-256 against the file it received,
+and the archive is fetched over HTTPS. The first proves the bytes survived the
+wire, the second proves the mount, the route and the certificate work — which is
+the half that is wrong the first time.
+
+### 3. Send
+
+```
+https://relay.example.com/download/
+```
+
+A directory listing, served publicly. Anyone with the link can download it, which
+is the point: a friend should not need an account to install the thing that
+creates their account. **Nothing secret belongs in `dist/`.**
+
+### What they do
+
+Extract, double-click `Install.cmd`.
+
+It installs to `%LOCALAPPDATA%\Programs\Don` — per-user, so Windows never asks
+for an administrator password — and registers in Add/Remove Programs like
+anything else. `-AllUsers` installs to Program Files instead and does need
+elevation.
+
+Windows will warn first. The build is not code-signed, so SmartScreen shows
+"Windows protected your PC" and they have to choose *More info → Run anyway*. A
+certificate is the only thing that removes that, and it is bought per year. The
+archive's README says so, so nobody has to guess whether the warning is normal.
+
+### Sharing a catalogue with them
+
+Once they have the launcher, the VPS can also serve the catalogue it reads.
+
+```bash
+# on the VPS
+cp -r "Quake (1996)" deploy/feed/games/
+deploy/feed/build-feed.py --name "The shelf"
+```
+
+They set **Settings → Discovery → Shared catalogue feed** to
+`https://your-domain/feed/catalog.json` and see the same shelf you do.
+
+This is the one source that is not somebody else's website. Because you host the
+files, it is the only one that can state a SHA-256 it actually computed — so
+installs from it are verified, not merely hoped for. Full format and the rules a
+reader is protected by: [`feed/README.md`](feed/README.md).
+
+### Uninstalling
+
+Add/Remove Programs, or `Uninstall-Don.ps1` in the install folder.
+
+It removes exactly the files listed in `install-manifest.txt`, which the
+installer writes. That is why an uninstall can never take anything with it that
+the install did not put there — including when Don was installed into a folder
+that already had other things in it.
+
+The library is **kept unless you ask**, and the prompt defaults to no.
+`settings.json` holds the only copy of your relay token — the relay stores a hash
+and cannot reissue it — so a silent delete would be unrecoverable. `-RemoveLibrary`
+deletes it; `-Silent` on its own keeps it.
 
 ---
 
@@ -177,11 +260,16 @@ here**:
   encryption, because save files are the one thing a user cannot re-download.
   Deploying an endpoint that pretended to do this would be worse than not having
   one.
-- **A manifest feed index.** Sourcing feeds are deliberately client-side: a
-  manifest in `%LOCALAPPDATA%\GameLauncher\adapters\` is read by the launcher
-  itself, with no server involved. See
-  [`docs/sourcing-adapters.md`](../docs/sourcing-adapters.md). Centralising that
-  would be a design change, not a deployment step.
+- **A manifest feed index.** Sourcing feeds stay client-side: a manifest in
+  `%LOCALAPPDATA%\Don\adapters\` is read by the launcher itself, with no server
+  involved. See [`docs/sourcing-adapters.md`](../docs/sourcing-adapters.md).
+
+  A shared *catalogue* does now exist — see [`feed/README.md`](feed/README.md) —
+  but note where it lives. It is a static JSON file Caddy serves, not an endpoint
+  the relay implements, and the launcher reads it directly. That is deliberate:
+  a catalogue is a document, and a document needs a web server rather than an
+  API. The relay stays a service for the things that genuinely need one, which
+  are the things that involve more than one person's account.
 
 Both are real features worth building. They are named here so that "the relay is
 deployed" is not mistaken for "cloud saves work".

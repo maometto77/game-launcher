@@ -1,6 +1,7 @@
 ; Inno Setup script for the desktop client.
 ;
-; Publish first, then compile this:
+; Normally driven by build-release.ps1, which publishes first and passes the
+; version off the built binary. To compile it by hand:
 ;
 ;   dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
 ;   iscc deploy\installer\Don.iss
@@ -9,9 +10,20 @@
 ;
 ; The published output is a single self-contained executable plus whatever is in
 ; tools\, so this installs a handful of files rather than a runtime.
+;
+; This is the optional half of the distribution story. The zip that
+; build-release.ps1 produces installs through Install-Don.ps1 and needs neither
+; Inno Setup nor a build machine that has it, which is why the zip is what gets
+; published and this is a convenience for people who expect a setup.exe.
 
 #define AppName        "Don"
-#define AppVersion     "1.0.0"
+
+; Supplied by build-release.ps1 as /DAppVersion=x.y.z. The fallback only applies
+; to a hand-run compile, so a release can never be stamped with a stale number.
+#ifndef AppVersion
+  #define AppVersion   "1.0.0"
+#endif
+
 #define AppPublisher   "Don"
 #define AppExeName     "Don.exe"
 #define PublishDir     "..\..\GameLauncher.Desktop\bin\publish\win-x64"

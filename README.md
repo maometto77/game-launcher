@@ -107,13 +107,21 @@ path and an in-process relay for the hub tests. Nothing reaches the network.
 
 ## Ship it
 
-```bash
-dotnet publish GameLauncher.Desktop -c Release -p:PublishProfile=win-x64
+```powershell
+.\deploy\installer\build-release.ps1
 ```
 
-One self-contained `GameLauncher.Desktop.exe`, about 78 MB, that runs on Windows
-with no .NET installed. An Inno Setup script and a one-command VPS deployment for
-the optional relay are in [`deploy/`](deploy/README.md).
+Publishes one self-contained `Don.exe`, about 77 MB, that runs on Windows with no
+.NET installed — then packages it with an install and uninstall script as
+`Don-<version>-win-x64.zip`.
+
+`publish-release.ps1` puts that archive on a VPS, where Caddy serves it at
+`/download`, so handing the launcher to someone is a link rather than an
+attachment. They extract it and double-click `Install.cmd`; it installs per-user,
+so Windows never asks them for an administrator password.
+
+The whole path — publish settings, distribution, the optional relay's
+one-command VPS deployment — is in [`deploy/`](deploy/README.md).
 
 ---
 

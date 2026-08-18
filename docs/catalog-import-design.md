@@ -1782,7 +1782,7 @@ build links, publishes, and then throws when some style, template or converter
 is first realised — which is to say after shipping, on a screen no test opened.
 The saving is not worth a class of failure that only appears in the field.
 
-Result: one 78 MB `GameLauncher.Desktop.exe` that runs with no .NET installed.
+Result: one 77 MB `Don.exe` that runs with no .NET installed.
 Verified by publishing it and running it against a throwaway `--state-dir`: it
 starts, migrates the schema to version 8, initialises the achievement watcher
 and navigates to the home page with nothing above debug level in the log.

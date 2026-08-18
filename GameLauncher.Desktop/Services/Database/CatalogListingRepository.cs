@@ -776,8 +776,8 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
                 new CommandDefinition(
                     """
                     INSERT OR IGNORE INTO ListingDownload
-                        (ListingId, SourceKey, Url, FileName, SizeBytes, Md5, Sha1, Format, Kind, MirrorRank)
-                    VALUES (@ListingId, @SourceKey, @Url, @FileName, @SizeBytes, @Md5, @Sha1, @Format,
+                        (ListingId, SourceKey, Url, FileName, SizeBytes, Md5, Sha1, Sha256, Format, Kind, MirrorRank)
+                    VALUES (@ListingId, @SourceKey, @Url, @FileName, @SizeBytes, @Md5, @Sha1, @Sha256, @Format,
                             @Kind, @MirrorRank);
                     """,
                     download,
@@ -1001,7 +1001,7 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
         var downloads = await connection.QueryAsync<ListingDownload>(
             new CommandDefinition(
                 """
-                SELECT Id, ListingId, SourceKey, Url, FileName, SizeBytes, Md5, Sha1, Format, Kind, MirrorRank
+                SELECT Id, ListingId, SourceKey, Url, FileName, SizeBytes, Md5, Sha1, Sha256, Format, Kind, MirrorRank
                 FROM   ListingDownload WHERE ListingId IN @Ids ORDER BY MirrorRank;
                 """,
                 new { Ids = ids },

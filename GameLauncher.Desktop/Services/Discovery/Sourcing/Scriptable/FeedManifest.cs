@@ -87,6 +87,15 @@ public sealed class FeedDownloadMap
     /// <summary>Path to the size in bytes.</summary>
     public string? SizeBytes { get; set; }
 
+    /// <summary>Path to a SHA-256 digest in hex.</summary>
+    /// <remarks>
+    /// Preferred over the other two when the feed offers a choice. A feed that
+    /// publishes its own files can usually say this; one mirroring someone
+    /// else's reports whatever that someone published, which is why all three
+    /// are mappable rather than one.
+    /// </remarks>
+    public string? Sha256 { get; set; }
+
     /// <summary>Path to an SHA-1 digest in hex.</summary>
     public string? Sha1 { get; set; }
 

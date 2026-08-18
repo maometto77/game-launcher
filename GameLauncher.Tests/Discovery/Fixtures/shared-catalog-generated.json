@@ -1,0 +1,73 @@
+{
+  "feed": "don-catalog",
+  "version": 1,
+  "name": "The shelf",
+  "updated": "2026-08-17T23:07:44Z",
+  "entries": [
+    {
+      "id": "doom-ii-1994",
+      "title": "Doom II",
+      "year": 1994,
+      "updated": "2026-08-17T23:06:56Z",
+      "downloads": [
+        {
+          "url": "games/Doom%20II%20%5B1994%5D/doom2.zip",
+          "fileName": "doom2.zip",
+          "size": 500000,
+          "sha256": "d9025ee159708b8c2955ffe8a9b27c4c19b0cb44ab648f4d5813a1225bd41349",
+          "kind": "game"
+        },
+        {
+          "url": "games/Doom%20II%20%5B1994%5D/doom2.torrent",
+          "fileName": "doom2.torrent",
+          "kind": "torrent",
+          "format": "Torrent"
+        }
+      ]
+    },
+    {
+      "id": "quake-1996",
+      "title": "Quake",
+      "year": 1996,
+      "description": "Shooting, but vertical.",
+      "developer": "id Software",
+      "genres": [
+        "Action"
+      ],
+      "updated": "2026-08-17T23:06:56Z",
+      "images": [
+        {
+          "url": "games/Quake%20%281996%29/cover.jpg",
+          "kind": "cover"
+        },
+        {
+          "url": "games/Quake%20%281996%29/screenshot-1.png",
+          "kind": "screenshot"
+        }
+      ],
+      "downloads": [
+        {
+          "url": "games/Quake%20%281996%29/quake.zip",
+          "fileName": "quake.zip",
+          "size": 2000000,
+          "sha256": "46a592f9c1e53365bb555d915a64d12b36826fac121f3cf7b6f5c3098d3e8f06",
+          "kind": "game"
+        }
+      ]
+    },
+    {
+      "id": "some-demo",
+      "title": "Some Demo",
+      "updated": "2026-08-17T23:06:56Z",
+      "downloads": [
+        {
+          "url": "games/Some%20Demo/Weird%20Name%20%26%20Chars%20%28v1.2%29.7z",
+          "fileName": "Weird Name & Chars (v1.2).7z",
+          "size": 1000,
+          "sha256": "3f5e8ac9c979b96704c4d04e7f00e1fb62122ba42939a2223f91873bccfd61ec",
+          "kind": "game"
+        }
+      ]
+    }
+  ]
+}

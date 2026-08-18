@@ -565,12 +565,24 @@ public sealed class DialogSmokeTests
 
                 Assert.True(shell.HasSubSections);
 
+                // Settings is here because it is the densest page in the
+                // application — every input style the theme defines appears on
+                // it, and most of them appear nowhere else. Realised only under
+                // the default theme, a caption or text box style that one
+                // palette omits would first throw for whoever had chosen that
+                // palette and then opened Settings.
+                await host.Resolve<ISettingsService>().LoadAsync();
+
+                var settings = host.Resolve<SettingsViewModel>();
+                await settings.OnNavigatedToAsync();
+
                 _wpf.Invoke(() =>
                 {
                     theme.Apply(candidate);
                     Realise(host.Resolve<MainWindow>());
                     RealisePage(library);
                     RealisePage(discover);
+                    RealisePage(settings);
                     Realise(host.Resolve<InstallFromUrlWindow>());
                 });
             }

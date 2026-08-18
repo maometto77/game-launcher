@@ -3,6 +3,9 @@
 {$RELAY_DOMAIN} {
 	tls {$RELAY_ACME_EMAIL}
 
+	# Caddy's default matcher for this only compresses text-like content
+	# types, so the release archive below is served as-is rather than
+	# spending CPU re-compressing something already compressed.
 	encode zstd gzip
 
 	# SignalR. The presence hub upgrades to WebSockets, and a proxy that
@@ -20,7 +23,54 @@
 		}
 	}
 
+	# Releases, so the launcher can be handed to someone as a link rather
+	# than a 70 MB attachment. handle_path strips the prefix, so
+	# /download/Don-1.0.0-win-x64.zip is dist/Don-1.0.0-win-x64.zip on the
+	# host.
+	#
+	# This is public. Anyone with the URL can download it, which is the
+	# point — a friend should not need an account to install the thing that
+	# creates their account. Nothing secret belongs in dist/.
+	handle_path /download/* {
+		root * /srv/dist
+		file_server browse
+
+		# Overrides the API's no-store below. Archive names carry their
+		# version, so a cached copy can never be the wrong build, and
+		# five minutes is short enough that a new release appears
+		# promptly in the listing.
+		header Cache-Control "public, max-age=300"
+	}
+
+	# The shared catalogue: catalog.json and the files it points at. Kept
+	# apart from /download because they answer different questions —
+	# /download is how someone gets the launcher, /feed is what the
+	# launcher reads once they have it.
+	#
+	# Addresses inside catalog.json are relative to catalog.json, so the
+	# whole tree can move to another domain without editing an entry.
+	handle_path /feed/* {
+		root * /srv/feed
+		file_server
+
+		# No browse here, unlike /download. The listing at /download is
+		# the link you send someone; this one is read by software that
+		# already knows the single file it wants, and a directory index
+		# of a private shelf is not something to hand out by accident.
+
+		# Short, because a republished catalogue should be picked up on
+		# the next import rather than whenever a cache decides. The
+		# files it points at carry their digest in the feed, so a stale
+		# copy of one is caught by verification rather than by a header.
+		header Cache-Control "public, max-age=60"
+	}
+
 	handle {
+		# The relay is an API. Nothing it returns should be cached by
+		# anything in between — which is why this sits here rather than
+		# in the site-wide block, where it would also apply to releases.
+		header Cache-Control "no-store"
+
 		reverse_proxy relay:8080
 	}
 
@@ -29,10 +79,6 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "no-referrer"
-
-		# The relay is an API. Nothing it returns should be cached by
-		# anything in between.
-		Cache-Control "no-store"
 
 		-Server
 	}

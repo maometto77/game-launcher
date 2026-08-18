@@ -45,6 +45,45 @@ public sealed class CatalogListingRepositoryTests
     }
 
     [Fact]
+    public async Task A_sha256_survives_the_round_trip_and_wins_over_the_weaker_digests()
+    {
+        using var host = new TestAppHost();
+        var repository = host.Resolve<ICatalogListingRepository>();
+
+        const string Sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+        await repository.UpsertManyAsync([Listing("lst_h", "Quake", 1996, listing =>
+        {
+            listing.Downloads =
+            [
+                new ListingDownload
+                {
+                    Url = "https://a.test/quake.zip",
+                    SourceKey = "test",
+                    Md5 = "cccccccccccccccccccccccccccccccc",
+                    Sha1 = "dddddddddddddddddddddddddddddddddddddddd",
+                    Sha256 = Sha256
+                }
+            ];
+        })]);
+
+        var loaded = await repository.GetAsync("lst_h");
+
+        // The column arrived in a migration, so this is as much a check that the
+        // schema moved as that the mapping is right: a missing column would fail
+        // the insert, and a column missing from either SQL statement would come
+        // back null having been written.
+        var download = Assert.Single(loaded!.Downloads);
+
+        Assert.Equal(Sha256, download.Sha256);
+
+        // What the whole point of a self-hosted feed rests on: the strongest
+        // digest is the one the download path is handed, and it infers SHA-256
+        // from the length.
+        Assert.Equal(Sha256, download.BestChecksum);
+    }
+
+    [Fact]
     public async Task Lookup_entities_are_shared_rather_than_duplicated()
     {
         using var host = new TestAppHost();
