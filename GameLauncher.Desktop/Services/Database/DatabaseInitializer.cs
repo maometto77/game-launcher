@@ -796,6 +796,26 @@ public sealed class DatabaseInitializer : IDatabaseInitializer
         ALTER TABLE Game ADD COLUMN SteamAppId INTEGER NULL;
 
         CREATE INDEX IF NOT EXISTS IX_Game_SteamAppId ON Game (SteamAppId);
+        """,
+
+        // ---------------------------------------------------------------
+        // 9. SHA-256 on listing downloads.
+        //
+        // The download path has always verified SHA-256 — ChecksumAlgorithm
+        // infers the algorithm from the digest's length — but a listing could
+        // only carry MD5 or SHA-1, so a source publishing a modern digest had
+        // nowhere to put it and the file was fetched unverified.
+        //
+        // That gap did not matter while every source mirrored someone else's
+        // files and reported whatever digest that someone happened to publish.
+        // It matters for a self-hosted feed, which publishes its own files and
+        // therefore knows exactly what is in them.
+        //
+        // Nullable and added rather than backfilled: no existing source reports
+        // one, and a column of nulls is the honest representation of that.
+        // ---------------------------------------------------------------
+        """
+        ALTER TABLE ListingDownload ADD COLUMN Sha256 TEXT NULL;
         """
     ];
 

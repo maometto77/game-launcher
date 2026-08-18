@@ -206,6 +206,25 @@ public sealed record AppSettings
     public bool MyAbandonwareEnabled { get; init; }
 
     /// <summary>
+    /// Address of a shared catalogue feed, or <see langword="null"/> for none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A single JSON document listing what one group has gathered, so everyone
+    /// pointed at it sees the same catalogue. Unset by default: this is somebody's
+    /// own server, and which one is not something a launcher can guess.
+    /// </para>
+    /// <para>
+    /// Unlike the other sources, this one is not a site being read from the
+    /// outside — whoever publishes it hosts the files too. That is why it is the
+    /// only source that can state a SHA-256 it actually computed, and why it
+    /// outranks the rest when two sources describe the same game.
+    /// </para>
+    /// </remarks>
+    [JsonPropertyName("sharedCatalogUrl")]
+    public string? SharedCatalogUrl { get; init; }
+
+    /// <summary>
     /// An Internet Archive uploader whose items should be imported, or
     /// <see langword="null"/>.
     /// </summary>

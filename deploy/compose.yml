@@ -60,6 +60,17 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
 
+      # Releases, served at /download. Read-only: Caddy has no reason to write
+      # here, and a web server that cannot write to its document root is one
+      # fewer way for a file to appear in it. Populated by
+      # installer/publish-release.ps1 over SSH.
+      - ./dist:/srv/dist:ro
+
+      # The shared catalogue, served at /feed. Also read-only, and for the same
+      # reason. Populated by putting games under feed/games/ and running
+      # feed/build-feed.py.
+      - ./feed:/srv/feed:ro
+
       # Certificates survive a restart. Without this Caddy re-issues on every
       # `up`, and Let's Encrypt rate-limits that quickly enough to lock the
       # domain out for a week.

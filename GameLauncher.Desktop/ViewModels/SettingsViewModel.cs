@@ -100,6 +100,17 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private string _internetArchiveUploader = string.Empty;
 
+    /// <summary>
+    /// Address of a shared catalogue feed, or empty for none.
+    /// </summary>
+    /// <remarks>
+    /// The one source that has to be typed in, because it is somebody's own
+    /// server and there is nothing to guess. Usually the address a friend sends
+    /// along with the launcher itself.
+    /// </remarks>
+    [ObservableProperty]
+    private string _sharedCatalogUrl = string.Empty;
+
     [ObservableProperty]
     private int _discoveryRefreshHours = 24;
 
@@ -163,6 +174,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         MyAbandonwareEnabled = current.MyAbandonwareEnabled;
         InternetArchiveCollections = string.Join(Environment.NewLine, current.InternetArchiveCollections);
         InternetArchiveUploader = current.InternetArchiveUploader ?? string.Empty;
+        SharedCatalogUrl = current.SharedCatalogUrl ?? string.Empty;
         DiscoveryRefreshHours = current.DiscoveryRefreshHours;
         DiscoveryImageCacheMegabytes = current.DiscoveryImageCacheMegabytes;
 
@@ -272,6 +284,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
                 InternetArchiveUploader = InternetArchiveUploader.Trim() is { Length: > 0 } uploader
                     ? uploader
                     : null,
+
+                // Stored as typed. The source treats anything that is not an
+                // absolute http address as not configured, so a typo leaves it
+                // quietly unavailable rather than refusing to save the rest of
+                // the page.
+                SharedCatalogUrl = SharedCatalogUrl.Trim() is { Length: > 0 } feed ? feed : null,
 
 
                 // Clamped rather than validated with a message: both are dials

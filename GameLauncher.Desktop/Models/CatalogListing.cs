@@ -192,6 +192,9 @@ public sealed class ListingDownload
     /// <summary>SHA-1 digest as hex, or <see langword="null"/>.</summary>
     public string? Sha1 { get; set; }
 
+    /// <summary>SHA-256 digest as hex, or <see langword="null"/>.</summary>
+    public string? Sha256 { get; set; }
+
     /// <summary>Format label, such as <c>ZIP</c>.</summary>
     public string? Format { get; set; }
 
@@ -205,7 +208,16 @@ public sealed class ListingDownload
     /// Gets the strongest digest available, ready for
     /// <see cref="Services.Download.ChecksumAlgorithm.Auto"/>.
     /// </summary>
-    public string? BestChecksum => string.IsNullOrWhiteSpace(Sha1) ? Md5 : Sha1;
+    public string? BestChecksum
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Sha256)) { return Sha256; }
+            if (!string.IsNullOrWhiteSpace(Sha1)) { return Sha1; }
+
+            return string.IsNullOrWhiteSpace(Md5) ? null : Md5;
+        }
+    }
 }
 
 /// <summary>

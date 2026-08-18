@@ -64,6 +64,7 @@ public static class FeedDownloadMapper
                 Url = url.AbsoluteUri,
                 FileName = item.String(manifest.Map.FileName) ?? DeriveFileName(url),
                 SizeBytes = item.Int64(manifest.Map.SizeBytes),
+                Sha256 = Digest(item.String(manifest.Map.Sha256)),
                 Sha1 = Digest(item.String(manifest.Map.Sha1)),
                 Md5 = Digest(item.String(manifest.Map.Md5)),
                 Format = item.String(manifest.Map.Format) ?? DeriveFormat(url, kind),

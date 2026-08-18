@@ -376,6 +376,7 @@ public sealed class ListingMerger : IListingMerger
                     SizeBytes = download.SizeBytes,
                     Md5 = download.Md5,
                     Sha1 = download.Sha1,
+                    Sha256 = download.Sha256,
                     Format = download.Format,
                     Kind = download.Kind,
                     MirrorRank = merged.Count

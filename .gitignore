@@ -92,6 +92,17 @@ deploy/.env
 deploy/.env.bak.*
 deploy/installer/output/
 
+# What the VPS serves at /download. Populated by publishing a release, not by a
+# checkout — the archive is the better part of a hundred megabytes.
+deploy/dist/
+
+# What the VPS serves at /feed: somebody's games, the catalogue built from them,
+# and the hash cache that makes rebuilding it cheap. The script that generates
+# all of this is tracked; none of its output is.
+deploy/feed/games/
+deploy/feed/catalog.json
+deploy/feed/.build-feed-cache.json
+
 # Bundled external tools are chosen and verified per build, not committed. The
 # folder's README is, so the contract stays visible.
 GameLauncher.Desktop/tools/win-x64/*

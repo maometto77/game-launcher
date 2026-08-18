@@ -203,6 +203,24 @@
                                  Text="{Binding InternetArchiveUploader, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="The Archive indexes uploaders by email address, so a screen name will not match. Added to the collections above rather than replacing them." />
 
+                        <TextBlock Margin="0,14,0,0"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Shared catalogue feed" />
+
+                        <TextBox Margin="0,6,0,0"
+                                 Width="420"
+                                 HorizontalAlignment="Left"
+                                 FontFamily="{StaticResource MonoFontFamily}"
+                                 Text="{Binding SharedCatalogUrl, UpdateSourceTrigger=PropertyChanged}"
+                                 ToolTip="A catalogue somebody hosts and shares, so everyone pointed at it sees the same games. Leave blank if you have not been given one." />
+
+                        <TextBlock Margin="0,4,0,0"
+                                   MaxWidth="520"
+                                   HorizontalAlignment="Left"
+                                   Style="{StaticResource CaptionTextStyle}"
+                                   Text="Unlike the sources above, whoever publishes this holds the files, so downloads from it are checked against a hash they computed themselves."
+                                   TextWrapping="Wrap" />
+
                         <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
                             <StackPanel>
                                 <TextBlock Style="{StaticResource CaptionTextStyle}" Text="Refresh every (hours)" />
