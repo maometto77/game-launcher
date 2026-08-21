@@ -421,6 +421,33 @@ public sealed class CatalogListingRepositoryTests
     }
 
     [Fact]
+    public async Task A_search_pass_is_never_mistaken_for_the_last_import()
+    {
+        // The subtle one. A search is a completed run over the same source, but
+        // it only covered what its term matched. Treated as the previous pass,
+        // its start time becomes the incremental watermark and the next import
+        // skips everything the search did not happen to match — items silently
+        // missing from the catalogue, with nothing to indicate why.
+        using var host = new TestAppHost();
+        var repository = host.Resolve<ICatalogListingRepository>();
+
+        var import = await repository.StartRunAsync("test", ImportMode.Incremental);
+        await repository.CompleteRunAsync(new CatalogImportRun { RunId = import, ItemsSeen = 500 });
+
+        var search = await repository.StartRunAsync("test", ImportMode.Search);
+        await repository.CompleteRunAsync(new CatalogImportRun { RunId = search, ItemsSeen = 3 });
+
+        var previous = await repository.GetLastRunAsync("test");
+
+        Assert.NotNull(previous);
+        Assert.Equal(ImportMode.Incremental, previous.Mode);
+        Assert.Equal(import, previous.RunId);
+
+        // The search is still recorded; it is just not evidence of coverage.
+        Assert.Equal(500, previous.ItemsSeen);
+    }
+
+    [Fact]
     public async Task A_run_that_parsed_nothing_reports_a_zero_success_rate()
     {
         // The signal that a source has changed shape underneath a working parser.

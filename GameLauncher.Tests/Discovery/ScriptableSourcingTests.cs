@@ -322,12 +322,279 @@ public sealed class ScriptableSourcingTests
         var manifests = await host.Resolve<IFeedManifestStore>().GetAsync();
 
         Assert.Equal(
-            ["local-shelf", "releases-rss", "zenodo"],
+            ["archive-org-library", "local-catalog", "local-shelf", "releases-rss", "zenodo"],
             manifests.Select(manifest => Path.GetFileNameWithoutExtension(manifest.SourcePath)).Order());
 
         // shelf.json is a payload sitting beside the manifest that reads it, not
         // a broken manifest, so it is passed over rather than complained about.
         Assert.DoesNotContain(manifests, manifest => manifest.SourcePath.EndsWith("shelf.json", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void A_manifest_leads_the_built_ins_unless_it_says_otherwise()
+    {
+        // Someone who wrote a manifest for a host this launcher already handles
+        // meant it to be used. Having to say so twice — once by writing the file
+        // and again by numbering it — would be a poor default.
+        Assert.Equal(100, Manifest().Priority);
+        Assert.Equal(100, new FeedManifest().Priority);
+    }
+
+    [Fact]
+    public async Task A_manifests_priority_reaches_the_payload_that_ranks_it()
+    {
+        // One adapter serves every feed in the folder and they do not agree
+        // about where they belong, so the number has to travel with the answer
+        // rather than sit on the adapter.
+        await using var server = await LoopbackFileServer.StartAsync();
+
+        server.AddFile("doom.zip", Archive());
+
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "slow.yaml"),
+            YamlManifest("slow", "local.test") + "priority: -10\n");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "feed.json"),
+            $$"""{ "files": [ { "url": "{{server.FileUrl("doom.zip").AbsoluteUri}}", "name": "doom.zip" } ] }""");
+
+        var payload = await Adapter(host).ExtractDownloadPayloadAsync(
+            Listing(), "https://local.test/games/doom");
+
+        Assert.True(payload.HasDownloads);
+        Assert.Equal(-10, payload.Priority);
+    }
+
+    [Fact]
+    public async Task The_higher_priority_manifest_claims_a_shared_host()
+    {
+        // Two manifests overlapping is how someone stages a replacement. The
+        // number is how they say which one they meant.
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        // Named so that file-name order would pick the *other* one, which is
+        // what makes this a test of the priority rather than of the ordering it
+        // falls back on.
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "a-old.yaml"),
+            YamlManifest("old", "local.test") + "priority: 10\n");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "z-new.yaml"),
+            YamlManifest("new", "local.test") + "priority: 200\n");
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "feed.json"),
+            """{ "files": [ { "url": "https://cdn.test/doom.zip", "name": "doom.zip" } ] }""");
+
+        var payload = await Adapter(host).ExtractDownloadPayloadAsync(
+            Listing(), "https://local.test/games/doom");
+
+        Assert.Equal(200, payload.Priority);
+        Assert.Equal("new", Assert.Single(payload.Downloads).SourceKey);
+    }
+
+    [Fact]
+    public async Task The_archive_example_is_valid_even_though_it_ships_disabled()
+    {
+        // It ships disabled because it overrides a working built-in adapter, so
+        // the loader passes over it and the "every example loads" test above
+        // never sees it. Without this, the one example a user is most likely to
+        // switch on is the one nothing checks.
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        var text = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "archive-org-feed.yaml"));
+
+        Assert.Contains("enabled: false", text, StringComparison.Ordinal);
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "archive-org-feed.yaml"),
+            text.Replace("enabled: false", "enabled: true", StringComparison.Ordinal));
+
+        var manifest = Assert.Single(await host.Resolve<IFeedManifestStore>().GetAsync());
+
+        Assert.Equal("archive-org-feed", manifest.Key);
+        Assert.Empty(manifest.Validate());
+
+        // It claims Archive item pages and nothing else on that host.
+        Assert.Contains("archive.org", manifest.Match.Hosts);
+        Assert.Contains("/details/", manifest.Match.PathContains);
+
+        // The script it names has to be the one that actually ships beside it.
+        Assert.NotNull(manifest.Transform);
+        Assert.Contains("template-scraper.py", manifest.Transform!.Args);
+
+        Assert.True(File.Exists(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "template-scraper.py")));
+    }
+
+    [Fact]
+    public async Task The_archive_example_maps_what_its_scraper_emits()
+    {
+        // The manifest's paths and the scraper's field names are two halves of
+        // one contract written in two languages. This is what notices when only
+        // one of them is edited.
+        var payload = FeedReader.Read(
+            """
+            { "results": [
+                { "title": "Doom",
+                  "file_name": "Doom_1993.zip",
+                  "download_url": "https://archive.org/download/msdos_Doom_1993/Doom_1993.zip",
+                  "sha1": "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                  "md5": "cccccccccccccccccccccccccccccccc",
+                  "checksum": "sha1:da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                  "size_bytes": 2359527,
+                  "format": "ZIP" },
+                { "title": "Doom",
+                  "file_name": "msdos_Doom_1993_archive.torrent",
+                  "download_url":
+                    "https://archive.org/download/msdos_Doom_1993/msdos_Doom_1993_archive.torrent",
+                  "sha1": null, "md5": null, "checksum": null,
+                  "size_bytes": null, "format": "Torrent" } ] }
+            """,
+            FeedFormat.Json);
+
+        var manifest = await LoadArchiveExampleAsync();
+        var downloads = FeedDownloadMapper.Map(payload, manifest, "lst_1");
+
+        Assert.Equal(2, downloads.Count);
+
+        Assert.Equal("Doom_1993.zip", downloads[0].FileName);
+        Assert.Equal(2359527, downloads[0].SizeBytes);
+        Assert.Equal("da39a3ee5e6b4b0d3255bfef95601890afd80709", downloads[0].Sha1);
+        Assert.Equal(DownloadKind.Game, downloads[0].Kind);
+
+        // Last, and classified as a torrent by its extension alone — the same
+        // rule the download service uses when it picks a transport.
+        Assert.Equal(DownloadKind.Torrent, downloads[1].Kind);
+        Assert.True(downloads[0].MirrorRank < downloads[1].MirrorRank);
+
+        // The digests of the .torrent itself describe the pointer, not what it
+        // delivers, so the scraper drops them rather than have the download
+        // service verify the wrong thing.
+        Assert.Null(downloads[1].Sha1);
+        Assert.Null(downloads[1].SizeBytes);
+    }
+
+    [Fact]
+    public async Task The_archive_scraper_turns_a_real_item_into_addresses()
+    {
+        // The whole path, as it runs on a user's machine: the captured payload
+        // through the real hook runner into the real mapper.
+        if (Interpreter() is not { } python)
+        {
+            // No Python on this machine, so there is nothing to exercise. The
+            // manifest and mapping halves are covered above without it.
+            return;
+        }
+
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "template-scraper.py"),
+            Path.Combine(directory, "template-scraper.py"));
+
+        var output = await host.Resolve<IScriptHookRunner>().RunAsync(
+            new FeedTransform { Command = python, Args = ["template-scraper.py"], TimeoutSeconds = 60 },
+            Fixture("archive-downloadable-item.json"),
+            directory);
+
+        var manifest = await LoadArchiveExampleAsync();
+        var downloads = FeedDownloadMapper.Map(FeedReader.Read(output, FeedFormat.Json), manifest, "lst_1");
+
+        Assert.Equal(2, downloads.Count);
+
+        Assert.Equal(
+            "https://archive.org/download/msdos_Doom_1993/Doom_1993.zip",
+            downloads[0].Url);
+
+        Assert.Equal("dddddddddddddddddddddddddddddddddddddddd", downloads[0].Sha1);
+        Assert.Equal(DownloadKind.Torrent, downloads[1].Kind);
+
+        // Screenshots, the item tile and the _files.xml are all originals too.
+        // Only what could actually be installed is offered.
+        Assert.DoesNotContain(downloads, download =>
+            download.FileName?.EndsWith(".png", StringComparison.OrdinalIgnoreCase) == true ||
+            download.FileName?.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [Fact]
+    public async Task The_archive_scraper_finds_a_torrent_published_as_metadata()
+    {
+        // A real item marks its .torrent 'metadata', not 'original', so a
+        // scraper that looks for it among the originals never finds one.
+        // archive-downloadable-item.json happens to say 'original', which is
+        // why this case needs a payload of its own rather than that fixture.
+        if (Interpreter() is not { } python)
+        {
+            return;
+        }
+
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "template-scraper.py"),
+            Path.Combine(directory, "template-scraper.py"));
+
+        var output = await host.Resolve<IScriptHookRunner>().RunAsync(
+            new FeedTransform { Command = python, Args = ["template-scraper.py"], TimeoutSeconds = 60 },
+            """
+            { "metadata": { "identifier": "alice", "title": "Alice" },
+              "files": [
+                { "name": "Alice.zip", "source": "original", "format": "ZIP",
+                  "size": "989711238",
+                  "sha1": "62739d2989cda3facb92304251ccb4e60735dcdd" },
+                { "name": "alice_archive.torrent", "source": "metadata",
+                  "format": "Archive BitTorrent", "size": "3421" } ] }
+            """,
+            directory);
+
+        var manifest = await LoadArchiveExampleAsync();
+        var downloads = FeedDownloadMapper.Map(FeedReader.Read(output, FeedFormat.Json), manifest, "lst_1");
+
+        Assert.Equal(2, downloads.Count);
+
+        var torrent = Assert.Single(downloads, download => download.Kind == DownloadKind.Torrent);
+
+        Assert.EndsWith("alice_archive.torrent", torrent.Url, StringComparison.Ordinal);
+
+        // Ranked last, because it only works when aria2c is installed.
+        Assert.Equal(downloads[^1].Url, torrent.Url);
+    }
+
+    [Fact]
+    public async Task The_archive_scraper_refuses_a_restricted_item()
+    {
+        if (Interpreter() is not { } python)
+        {
+            return;
+        }
+
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        File.Copy(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "template-scraper.py"),
+            Path.Combine(directory, "template-scraper.py"));
+
+        var output = await host.Resolve<IScriptHookRunner>().RunAsync(
+            new FeedTransform { Command = python, Args = ["template-scraper.py"], TimeoutSeconds = 60 },
+            Fixture("archive-restricted-item.json"),
+            directory);
+
+        var manifest = await LoadArchiveExampleAsync();
+
+        // An item the Archive shows but will not release. Its addresses answer
+        // 403, so offering them would turn a clear explanation into a failure.
+        Assert.Empty(FeedDownloadMapper.Map(FeedReader.Read(output, FeedFormat.Json), manifest, "lst_1"));
     }
 
     [Fact]
@@ -670,6 +937,77 @@ public sealed class ScriptableSourcingTests
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
             new FixedRobots(robotsAllow),
             NullLogger<ScriptableSourcingAdapter>.Instance);
+
+    /// <summary>Reads a captured payload from the fixtures folder.</summary>
+    /// <param name="name">File name of the fixture.</param>
+    /// <returns>Its contents.</returns>
+    private static string Fixture(string name) =>
+        File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Discovery", "Fixtures", name));
+
+    /// <summary>
+    /// Finds a Python interpreter, or <see langword="null"/> when there is none.
+    /// </summary>
+    /// <returns>The command to run, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// The hook contract is a pipe, so the launcher needs no interpreter and the
+    /// test suite must not require one either. The tests that would run a script
+    /// stand down when there is nothing to run them with, rather than failing on
+    /// a machine that is configured exactly as intended.
+    /// </remarks>
+    private static string? Interpreter()
+    {
+        foreach (var candidate in new[] { "python", "python3", "py" })
+        {
+            try
+            {
+                using var probe = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = candidate,
+                    Arguments = "--version",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                });
+
+                if (probe is null)
+                {
+                    continue;
+                }
+
+                probe.WaitForExit(10_000);
+
+                if (probe.HasExited && probe.ExitCode == 0)
+                {
+                    return candidate;
+                }
+            }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                // Not on PATH. Try the next spelling.
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Loads the Archive example, which ships disabled, as an enabled manifest.
+    /// </summary>
+    /// <returns>The loaded manifest.</returns>
+    private static async Task<FeedManifest> LoadArchiveExampleAsync()
+    {
+        using var host = new TestAppHost();
+
+        var text = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "AdapterExamples", "archive-org-feed.yaml"));
+
+        await File.WriteAllTextAsync(
+            Path.Combine(host.Resolve<IAppPaths>().AdapterDirectory, "archive-org-feed.yaml"),
+            text.Replace("enabled: false", "enabled: true", StringComparison.Ordinal));
+
+        return Assert.Single(await host.Resolve<IFeedManifestStore>().GetAsync());
+    }
 
     /// <summary>Loads one shipped example manifest through the real store.</summary>
     /// <param name="name">File name of the example.</param>

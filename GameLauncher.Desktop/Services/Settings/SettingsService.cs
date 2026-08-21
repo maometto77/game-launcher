@@ -216,6 +216,27 @@ public sealed class SettingsService : ISettingsService
         }
 
         File.Move(temporary, path, overwrite: true);
-        _logger.LogDebug("Settings saved to {Path}.", path);
+
+        // Stated with what the file system says afterwards, not merely that the
+        // call returned. "Saved" on its own is a claim about this method having
+        // run; the length and write time are a claim about the file, and the two
+        // coming apart is the only signal that something outside this process is
+        // putting the file back. Diagnosing that without these numbers meant
+        // comparing a log that said saved against a file dated days earlier, and
+        // being unable to tell which was lying.
+        try
+        {
+            var written = new FileInfo(path);
+
+            _logger.LogDebug(
+                "Settings saved to {Path} ({Bytes} bytes, written {Written:O}).",
+                path, written.Length, written.LastWriteTimeUtc);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The write succeeded; only the confirmation failed. Reporting that
+            // as a failed save would be worse than reporting nothing.
+            _logger.LogDebug(ex, "Settings saved to {Path}, but it could not be re-read to confirm.", path);
+        }
     }
 }

@@ -96,7 +96,33 @@
             </Grid.RowDefinitions>
 
             <!-- Hero banner -->
-            <Grid Grid.Row="0" Height="260">
+            <Grid Grid.Row="0" Height="260" ClipToBounds="True">
+                <!--
+                    Blurred cover art, as a backdrop. Most games here have a
+                    portrait cover and no wide banner, which left the hero a flat
+                    slab of background; enlarging and blurring the cover fills it
+                    with something that belongs to the game without competing
+                    with the title over it.
+
+                    Scaled past the edges because a blur samples beyond its own
+                    bounds and would otherwise fade to transparent at the sides.
+                    Drawn at low quality deliberately — it is about to be blurred,
+                    so sampling it carefully would be work thrown away.
+                -->
+                <Image Source="{Binding Game.CoverArtPath, Converter={StaticResource PathToImage}}"
+                       Opacity="0.55"
+                       RenderOptions.BitmapScalingMode="LowQuality"
+                       RenderTransformOrigin="0.5,0.5"
+                       Stretch="UniformToFill">
+                    <Image.RenderTransform>
+                        <ScaleTransform ScaleX="1.2" ScaleY="1.2" />
+                    </Image.RenderTransform>
+                    <Image.Effect>
+                        <BlurEffect KernelType="Gaussian" Radius="60" />
+                    </Image.Effect>
+                </Image>
+
+                <!-- The real banner, when the game has one, over that backdrop. -->
                 <Image Source="{Binding Game.HeroArtPath, Converter={StaticResource PathToImage}}"
                        Stretch="UniformToFill" />
                 <!-- Scrim keeps the title legible over arbitrary artwork -->
@@ -341,6 +367,103 @@
                                     Content="Change executable…"
                                     Style="{StaticResource SecondaryButtonStyle}"
                                     ToolTip="Point this entry at a different program without losing its playtime or notes." />
+                        </StackPanel>
+                    </Border>
+
+                    <!--
+                        Where progress is kept. Answers a question a person
+                        actually has before they reinstall or move a game, and
+                        one this launcher is otherwise silent about.
+                    -->
+                    <Border Margin="0,12,0,0" Style="{StaticResource CardBorderStyle}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionLabelTextStyle}" Text="SAVES" />
+
+                            <TextBlock Margin="0,6,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="{Binding SaveStatusText}"
+                                       TextWrapping="Wrap"
+                                       Visibility="{Binding SaveStatusText, Converter={StaticResource HasValueToVisibility}}" />
+
+                            <ItemsControl Margin="0,10,0,0"
+                                          ItemsSource="{Binding SaveLocations}"
+                                          Visibility="{Binding HasSaveLocations, Converter={StaticResource BooleanToVisibility}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Margin="0,0,0,6"
+                                                Padding="10,8"
+                                                Background="{StaticResource SurfaceRaisedBrush}"
+                                                CornerRadius="6">
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <!--
+                                                        Presence is stated in words as well as
+                                                        colour. A dot alone is unreadable to
+                                                        anyone who does not distinguish the two
+                                                        hues, and this is a status indicator.
+                                                    -->
+                                                    <Ellipse Width="7"
+                                                             Height="7"
+                                                             VerticalAlignment="Center"
+                                                             Fill="{StaticResource OfflineBrush}"
+                                                             x:Name="Dot" />
+
+                                                    <TextBlock x:Name="Status"
+                                                               Margin="7,0,0,0"
+                                                               Style="{StaticResource CaptionTextStyle}"
+                                                               Text="{Binding StatusText}" />
+
+                                                    <TextBlock Margin="8,0,0,0"
+                                                               Style="{StaticResource CaptionTextStyle}"
+                                                               Text="{Binding KindLabel}" />
+
+                                                    <TextBlock Margin="8,0,0,0"
+                                                               Style="{StaticResource CaptionTextStyle}"
+                                                               Text="{Binding TagsText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Visibility="{Binding HasTags, Converter={StaticResource BooleanToVisibility}}" />
+                                                </StackPanel>
+
+                                                <TextBlock Margin="0,4,0,0"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           Style="{StaticResource CaptionTextStyle}"
+                                                           Text="{Binding Path}"
+                                                           TextWrapping="Wrap"
+                                                           ToolTip="{Binding Path}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding Exists}" Value="True">
+                                                <Setter TargetName="Dot"
+                                                        Property="Fill"
+                                                        Value="{StaticResource InGameBrush}" />
+                                                <Setter TargetName="Status"
+                                                        Property="Foreground"
+                                                        Value="{StaticResource InGameBrush}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!--
+                                Offered rather than done on page load: answering
+                                means downloading the save manifest, which is a
+                                decision that belongs to the person running this.
+                            -->
+                            <Button Margin="0,8,0,0"
+                                    HorizontalAlignment="Stretch"
+                                    Command="{Binding LookUpSavesCommand}"
+                                    Content="Look up save locations"
+                                    Style="{StaticResource SecondaryButtonStyle}"
+                                    ToolTip="Downloads the community save manifest the first time it is used."
+                                    Visibility="{Binding SavesNeedLookup, Converter={StaticResource BooleanToVisibility}}" />
+
+                            <TextBlock Margin="0,8,0,0"
+                                       Style="{StaticResource CaptionTextStyle}"
+                                       Text="Looking up…"
+                                       Visibility="{Binding IsResolvingSaves, Converter={StaticResource BooleanToVisibility}}" />
                         </StackPanel>
                     </Border>
 

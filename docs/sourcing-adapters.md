@@ -4,7 +4,7 @@ The launcher can take download addresses from feeds you describe yourself. A
 feed is one file in the adapter directory; no code, no rebuild.
 
 ```
-%LOCALAPPDATA%\GameLauncher\adapters\
+%LOCALAPPDATA%\Don\adapters\
 ```
 
 Anything named `*.yaml`, `*.yml` or `*.json` there is read at the moment it is
@@ -15,6 +15,78 @@ A manifest that will not parse, or that is missing something required, is
 reported in the log and skipped. The others still load. These are files people
 edit by hand, so a typo in one is the expected case rather than an exceptional
 one.
+
+---
+
+## The two halves of a manifest
+
+A manifest answers up to two different questions, and most confusion about them
+comes from not noticing there are two:
+
+| Section | Answers |
+|---|---|
+| `catalog` | What games are there. Fills the Discover grid. |
+| `match` / `request` / `map` | Given one of them, what can be downloaded. |
+
+**A manifest with only the second does nothing on its own.** It needs the
+catalogue to already hold listings from a host it claims, so a file that looks
+correct can sit there having no visible effect. If you are starting from an
+empty catalogue, write the `catalog` half first.
+
+Both together is the useful combination for a site nobody else covers: one
+section finds the games, the other works out how to fetch them.
+
+### Filling the catalogue
+
+```yaml
+key: my-catalogue
+catalog:
+  request:
+    url: catalog.json        # no scheme: a file beside the manifest
+  items: games
+  map:
+    title: title             # the only required field
+    id: id
+    year: year
+    page: page               # the address a sourcing adapter will dispatch on
+    downloadUrl: download
+```
+
+| Field | Required | Meaning |
+|---|---|---|
+| `catalog.enabled` | no | `false` parks this half only. Defaults to `true`. |
+| `catalog.request.url` | yes | What to fetch, or a file beside the manifest. |
+| `catalog.format` | no | `json`, `yaml` or `feed`. Defaults to `json`. |
+| `catalog.items` | no | Path to the list of games. Empty means the payload is the list. |
+| `catalog.transform` | no | An external program run over the payload first, same contract as above. |
+| `catalog.pageTemplate` | no | Builds a page address from an id — `https://archive.org/details/{id}`. |
+| `catalog.map.title` | yes | Everything else is optional. |
+| `catalog.map.*` | no | `id`, `year`, `description`, `developer`, `publisher`, `coverUrl`, `page`, `downloadUrl`. |
+
+`page` matters more than it looks. It is the address the sourcing adapters
+dispatch on, so a feed that lists nothing but names and Archive item pages still
+produces installable games — the built-in Archive adapter finds the files.
+
+`downloadUrl` is optional because of that. A listing with no address of its own
+is still offered for installation when an adapter certainly handles the page it
+points at — the addresses get worked out at install time. A feed listing nothing
+but names and Archive item pages is a complete, installable catalogue.
+
+Point `page` somewhere no adapter recognises and the listing is described but not
+offered, the same as any metadata-only source. Mapping `downloadUrl` is what
+settles it either way.
+
+### Duplicates
+
+Nothing in a manifest has to worry about them. Titles are normalised —
+punctuation, accents, articles, edition markers, version strings and roman
+numerals all folded away — and a game your feed names that another source
+already described lands on the same card, with both sources badged on it.
+Mirrors are additive, so the second feed contributes a fallback address rather
+than replacing the first.
+
+That is why `title` is the one required field: it is what the matching is done
+on.
 
 ---
 
@@ -46,6 +118,7 @@ the addresses are in the answer.
 | `key` | yes | Unique name. Lands on the download row, so you can see which feed supplied a file. |
 | `displayName` | no | What a person sees. Defaults to `key`. |
 | `enabled` | no | `false` parks a manifest without deleting it. Defaults to `true`. |
+| `priority` | no | Where this feed's addresses sit in the mirror list. Defaults to `100`. |
 | `match.hosts` | yes | Hosts this feed answers for, matched on suffix — `example.org` also claims `files.example.org`. |
 | `match.pathContains` | no | Narrows it further: only addresses containing one of these. |
 | `request.url` | yes | What to fetch. A value with no scheme is read from a file beside the manifest. |
@@ -82,13 +155,18 @@ other author more than it saved.
 | `url` | The download address. The only required one. |
 | `fileName` | Suggested file name. Derived from the address when absent. |
 | `sizeBytes` | Size, for the progress bar. |
-| `sha1`, `md5` | Verified after the transfer, by the same code every other download uses. |
+| `sha256`, `sha1`, `md5` | Verified after the transfer, by the same code every other download uses. |
 | `format` | A label such as `ZIP`. |
 | `title` | The game's title, where the feed also names it. |
 
-A checksum that is not 32, 40 or 64 hex characters is discarded rather than
+A checksum that is not 32, 40, 64 or 128 hex characters is discarded rather than
 used. A field holding `unknown` or a sentence is worse than an absent one: it
 would fail every transfer with a mismatch that is really a feed typo.
+
+Which of the three you map is only a label: an `md5:` or `sha256:` prefix is
+stripped, and the algorithm is inferred from the digest's length when the
+transfer is checked. A feed publishing one `checksum` field can be mapped to any
+of them.
 
 ---
 
@@ -177,6 +255,21 @@ Arguments that name a file in the adapter directory are resolved to it, so
 folder moves. A non-zero exit, a timeout or empty output is reported as a failed
 feed, not silently ignored.
 
+### When you need one
+
+The mapping language *walks* a payload; it does not build strings. A feed
+publishing whole addresses needs no hook. A feed publishing the parts of one —
+a file name here, a host there — cannot be mapped declaratively at all, because
+there is nowhere to write the join.
+
+That is the usual reason to reach for a script, and it is exactly the Internet
+Archive's shape: its metadata endpoint gives `Doom_1993.zip` and the identifier
+separately, never the address itself.
+
+`docs/adapter-examples/template-scraper.py` is a commented skeleton of the
+contract, whose worked example is that case. Replace one function to point it at
+another site.
+
 ---
 
 ## Rules a feed does not get to skip
@@ -259,7 +352,41 @@ map:
 
 ---
 
+## Which adapter answers
+
+**All of them.** Every adapter that claims one of a listing's addresses is asked,
+and their answers are merged into a single list of mirrors rather than one
+winning. A download that dies halfway is the ordinary case for these hosts, and
+the transfer only survives it if the next address is already on the row.
+
+`priority` decides the order they are tried in:
+
+| Value | Meaning |
+|---|---|
+| `100` | The default for a manifest. Ahead of everything built in. |
+| `0` | Where every adapter shipped with this launcher sits. |
+| `-10` | Behind the built-ins: only reached if they failed. |
+
+So a manifest is an override by default — writing one for a host the launcher
+already handles was meant to change what happens, and having to say so twice
+would be a poor default. Lowering it below zero turns the same feed into a last
+resort, which is what a slow mirror or a home server that is sometimes off is
+actually worth.
+
+Equal numbers are broken in favour of your manifest, on the grounds that
+something you wrote yourself is the better guess at what you meant.
+
+An address offered by two adapters appears once. Keeping both would have aria2c
+retry a URL that just failed and count it as a fallback.
+
+Among manifests, the highest `priority` claims a shared host, and file-name order
+breaks a tie.
+
+---
+
 ## Built-in adapters, for comparison
+
+Asked after your manifests, in this order.
 
 | Adapter | Handles | Notes |
 |---|---|---|

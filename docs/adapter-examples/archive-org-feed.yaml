@@ -1,0 +1,103 @@
+# Internet Archive, resolved by a script.
+#
+# Copy this file and template-scraper.py into %LOCALAPPDATA%\Don\adapters\.
+#
+# ---------------------------------------------------------------------------
+# Read this before enabling it
+# ---------------------------------------------------------------------------
+#
+# The launcher already has a built-in Archive adapter, written in C#, that does
+# what this manifest does and needs nothing installed. A user manifest is asked
+# first, so dropping this file in *replaces* that built-in answer for
+# archive.org — which is the point of the extension point, and is also the
+# reason to be deliberate about it.
+#
+# Enable this when you want to change what the Archive supplies: a different
+# file filter, an extra mirror, a private collection, your own naming. Keep the
+# built-in when you do not. If this manifest declines an address, the launcher
+# falls through to the built-in adapter anyway, so a narrow `pathContains` is a
+# safe way to override the Archive for some items and not others.
+#
+# It needs `python` on PATH. The launcher bundles no interpreter, and a hook
+# that cannot start is a failed feed. On a machine without Python, delete this
+# file: the built-in adapter is the better answer there.
+#
+# ---------------------------------------------------------------------------
+# Why a script at all
+# ---------------------------------------------------------------------------
+#
+# The Archive's metadata endpoint publishes file *names* — `Doom_1993.zip` —
+# and the parts of an address to build around them, in separate fields. The
+# mapping language walks a payload; it does not concatenate. There is no way to
+# write `https://archive.org/download/` + identifier + name declaratively, so
+# this is exactly the case `transform` exists for.
+#
+# A feed publishing whole addresses needs no script. See zenodo.yaml, which is
+# a dozen lines and runs nothing.
+#
+# ---------------------------------------------------------------------------
+# robots.txt
+# ---------------------------------------------------------------------------
+#
+# Checked before every request a manifest makes, the same as for the sources
+# the launcher ships with. archive.org's rules were, on 2026-08-19:
+#
+#     User-agent: *
+#     Disallow: /control/
+#     Disallow: /report/
+#
+# So /metadata/, /download/ and /advancedsearch.php are all permitted. Verified
+# against the live file, not assumed — and re-checked at request time, so this
+# comment going stale cannot let a disallowed fetch through.
+
+key: archive-org-feed
+displayName: Archive.org (script-resolved)
+
+# Ships disabled. It overrides a working built-in, so switching it on should be
+# a decision someone made rather than a side effect of copying a folder.
+enabled: false
+
+match:
+  hosts: [archive.org]
+
+  # Item pages only. The Archive serves a great deal that is not an item, and a
+  # manifest claiming the whole host would take addresses it cannot answer for
+  # away from the adapter that can.
+  pathContains: ['/details/']
+
+request:
+  # {slug} is the last path segment of the listing address, which for
+  # https://archive.org/details/msdos_Doom_1993 is the identifier. Substituted
+  # values are escaped as they go in.
+  url: https://archive.org/metadata/{slug}
+
+format: json
+
+transform:
+  command: python
+  args: [template-scraper.py]
+  timeoutSeconds: 30
+
+# What template-scraper.py writes. A transform's output is always read as JSON,
+# whatever `format` above said about what went into it.
+items: results
+
+map:
+  url: download_url
+  title: title
+  fileName: file_name
+  sizeBytes: size_bytes
+  format: format
+
+  # Both are emitted, so map whichever you prefer. A digest that is not 32, 40,
+  # 64 or 128 hex characters is discarded rather than used — a field holding
+  # "unknown" would fail every transfer with a mismatch that is really a typo.
+  sha1: sha1
+  md5: md5
+
+  # The scraper also emits a single `checksum` field carrying the stronger of
+  # the two, algorithm-prefixed as `sha1:...`. The prefix is stripped and the
+  # algorithm inferred from length, so this line is an equivalent alternative
+  # to the two above rather than an addition to them:
+  #
+  #   sha1: checksum

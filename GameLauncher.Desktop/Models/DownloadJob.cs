@@ -98,6 +98,17 @@ public sealed class DownloadJob
     /// <summary>Which source supplied the address being used.</summary>
     public string? SourceKey { get; set; }
 
+    /// <summary>
+    /// A source the user asked to be tried first, or <see langword="null"/>.
+    /// </summary>
+    /// <remarks>
+    /// Distinct from <see cref="SourceKey"/>, which records where the file
+    /// actually came from once a transfer has succeeded. This is a request made
+    /// before anything was fetched, and the two disagree whenever the chosen
+    /// source turned out to be unreachable and a later mirror answered instead.
+    /// </remarks>
+    public string? PreferredSourceKey { get; init; }
+
     /// <summary>How many mirrors have been tried.</summary>
     public int MirrorsTried { get; set; }
 

@@ -22,7 +22,28 @@ public enum ImportMode
     /// new rules to the whole catalogue in seconds, offline, which is only
     /// possible because raw payloads are kept.
     /// </remarks>
-    Remerge = 2
+    Remerge = 2,
+
+    /// <summary>
+    /// Fetch only what matches a search term, from every source that can answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A pass over a slice of a source chosen by the person at the keyboard,
+    /// rather than over whatever has changed. It exists so the catalogue can be
+    /// filled in on demand instead of only by importing a collection wholesale.
+    /// </para>
+    /// <para>
+    /// Deliberately its own mode rather than an incremental pass with a term
+    /// attached, because it must not touch the incremental bookkeeping. A search
+    /// resuming the stored cursor would start from wherever the last full import
+    /// had reached and search the wrong part of the source; a search recording a
+    /// completed run would move the watermark forward, and the next incremental
+    /// pass would skip everything the search did not happen to cover. Both would
+    /// silently lose items, which is the worst way for an import to be wrong.
+    /// </para>
+    /// </remarks>
+    Search = 3
 }
 
 /// <summary>

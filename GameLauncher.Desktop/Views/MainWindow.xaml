@@ -1,3 +1,13 @@
+<!--
+    The shell: navigation rail on the left, current page on the right.
+
+    Two rendering settings are set here rather than per view, because they have
+    to hold everywhere to be worth anything. 'Ideal' text formatting keeps glyph
+    positioning correct as the interface scales, and UseLayoutRounding snaps
+    element edges to whole device pixels — without it the single-pixel borders
+    this design leans on land on half a pixel at 125% and 150% and are drawn as
+    two grey ones. Both inherit down the whole tree.
+-->
 <Window x:Class="GameLauncher.Desktop.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -16,7 +26,8 @@
         FontFamily="{StaticResource UiFontFamily}"
         TextOptions.TextFormattingMode="Ideal"
         WindowStartupLocation="CenterScreen"
-        mc:Ignorable="d">
+        mc:Ignorable="d"
+        UseLayoutRounding="True">
 
     <Grid>
         <Grid.ColumnDefinitions>

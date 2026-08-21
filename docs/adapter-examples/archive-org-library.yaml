@@ -1,0 +1,112 @@
+# Your Archive.org uploads, as a Discover catalogue.
+#
+# Copy three files into %LOCALAPPDATA%\Don\adapters\ — this one,
+# archive_org_source.py, and _adapter_base.py — then replace the address below
+# with your own, turn discovery on in Settings, and press Refresh.
+#
+# _adapter_base.py is not optional. The script imports the shared machinery from
+# it (rate limiting, retries, size parsing, the record contract), and Python
+# resolves that import from the folder the script lives in — so copying the
+# script without it fails at startup with ImportError, not with anything that
+# reads like a manifest problem.
+#
+# ---------------------------------------------------------------------------
+# What this half does
+# ---------------------------------------------------------------------------
+#
+# `catalog:` answers "what games are there" and fills the Discover grid. It is
+# the half a manifest needs to do anything on its own — a file with only the
+# sourcing `match`/`request`/`map` sections resolves downloads for listings some
+# other source already found, and sits idle until one has.
+#
+# There is no sourcing half here on purpose. Every listing points at an
+# archive.org item page, and the launcher's built-in Archive adapter already
+# resolves those better than a manifest could: it adds both node-host mirrors
+# and the item's torrent as extra addresses on top of the one below.
+#
+# ---------------------------------------------------------------------------
+# How the fetch is split
+# ---------------------------------------------------------------------------
+#
+# The launcher fetches `request.url` — the first page of results — and pipes it
+# to the script on standard input. The script continues from that page's cursor,
+# looks up each item's files, and writes the finished records back.
+#
+# Splitting it that way is deliberate: robots.txt is checked before requests the
+# launcher makes, so having it make the first one keeps that gate in the path.
+# archive.org's rules, verified live on 2026-08-19, disallow only /control/ and
+# /report/, so /services/search/ and /metadata/ are both permitted.
+#
+# The script needs `python` on PATH. On a machine without it, delete this file:
+# nothing else here depends on an interpreter.
+#
+# ---------------------------------------------------------------------------
+# Duplicates
+# ---------------------------------------------------------------------------
+#
+# Not this file's problem. Titles are normalised — punctuation, accents,
+# articles, edition markers and roman numerals folded away — so a game that also
+# appears in a curated collection lands on one card carrying both sources, and
+# the addresses are unioned rather than replaced.
+
+key: archive-org-library
+displayName: Archive.org library
+enabled: true
+
+# Above the built-in adapters, so these addresses lead the mirror list. The
+# built-ins still contribute theirs behind them.
+priority: 100
+
+catalog:
+  request:
+    # Page one. Replace the uploader with your own address — the Archive indexes
+    # uploaders by email, so a screen name matches nothing.
+    #
+    # Percent-encoded because it is a URL: %28 %29 are the brackets, %22 the
+    # quotes, %3A the colons, %40 the @, %20 the spaces. The endpoint accepts
+    # '+' for a space too; %20 is used here only because it is also correct
+    # everywhere else a URL appears.
+    url: >-
+      https://archive.org/services/search/v1/scrape?q=%28uploader%3A%22rohanjackson071%40gmail.com%22%29%20AND%20mediatype%3Asoftware&fields=identifier,title,addeddate,publicdate,item_size,item_last_updated&count=100
+
+  format: json
+
+  transform:
+    command: python
+    args:
+      - archive_org_source.py
+      - --uploader
+      - rohanjackson071@gmail.com
+
+    # Generous, and capped at 300 by the launcher whatever is written here. A
+    # few hundred items means a few hundred metadata lookups; the script runs
+    # four at a time, which brings a full library in well inside this.
+    timeoutSeconds: 300
+
+  # What the script writes.
+  items: results
+
+  map:
+    title: title
+    id: source_id
+
+    # The item page, which is what the sourcing adapters dispatch on.
+    page: url
+
+    # When the Archive published the item. Two jobs: it supplies the year the
+    # matcher uses to tell a remake from an original, and it becomes the
+    # observation's change stamp so an incremental refresh can skip entries
+    # that have not moved.
+    #
+    # Note what this year means here. These items were uploaded recently, so
+    # the year is the upload's, not the game's release year. That is honest —
+    # it is the only date the feed carries — but it means a game the curated
+    # collections also hold under its real year will not match on year alone.
+    # The title-only second pass is what still merges those.
+    pubDate: pub_date
+
+    # The chosen file. Its SHA-1 is published by the Archive, so transfers are
+    # verified by the same code every other download uses.
+    downloadUrl: download_url
+    sha1: sha1
+    sizeBytes: size_bytes

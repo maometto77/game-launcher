@@ -1,0 +1,78 @@
+# A catalogue of your own, held in a file beside this one.
+#
+# Copy this file and catalog.json into %LOCALAPPDATA%\Don\adapters\, switch
+# discovery on in Settings, and press Refresh. The games appear in Discover.
+#
+# ---------------------------------------------------------------------------
+# The two halves of a manifest
+# ---------------------------------------------------------------------------
+#
+# A manifest can answer two different questions, and most confusion about them
+# comes from not noticing that:
+#
+#   catalog:              what games are there
+#   match/request/map:    given one of them, what can be downloaded
+#
+# A manifest with only the second is inert until something else has already put
+# listings in the catalogue for it to resolve. This file has only the first,
+# which is the useful way round to start: the games show up, and the built-in
+# adapters work out how to fetch them from the page each one points at.
+#
+# ---------------------------------------------------------------------------
+# Duplicates
+# ---------------------------------------------------------------------------
+#
+# Nothing here has to worry about them. Titles are normalised — punctuation,
+# accents, articles, edition markers and roman numerals all folded away — and a
+# game this feed names that another source already described lands on the same
+# card, with both sources listed on it. That is why `title` is the one required
+# field: it is what the matching is done on.
+
+key: local-catalog
+displayName: My catalogue
+enabled: true
+
+catalog:
+  request:
+    # No scheme, so this names a file in the adapter folder. Point it at an
+    # http(s) address instead and it is fetched — robots.txt permitting, which
+    # is checked the same as it is everywhere else.
+    url: catalog.json
+
+  format: json
+
+  # Where the list of games is in the payload. Empty would mean the document is
+  # itself the list.
+  items: games
+
+  map:
+    title: title          # required; everything else is optional
+    id: id
+    year: year
+    description: summary
+    developer: developer
+    publisher: publisher
+    coverUrl: cover
+
+    # Where this game lives. The sourcing adapters dispatch on this address, so
+    # pointing it at a page one of them handles is how an install finds mirrors
+    # this feed never mentioned.
+    page: page
+
+    # A direct address, where the feed has one.
+    #
+    # Optional. A listing with no address of its own is still offered for
+    # installation when an adapter certainly handles the page above, because the
+    # addresses are worked out at install time — so a feed of names and Archive
+    # item pages is already a complete catalogue.
+    #
+    # Point `page` somewhere no adapter recognises and the game is described but
+    # not offered, the same as any metadata-only source. Mapping this settles it
+    # either way.
+    downloadUrl: download
+
+  # Used when the feed gives identifiers rather than addresses. `{id}` is
+  # substituted and escaped. Ignored for items where `map.page` already
+  # produced one.
+  #
+  #   pageTemplate: https://archive.org/details/{id}

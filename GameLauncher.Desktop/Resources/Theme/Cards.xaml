@@ -84,6 +84,35 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!--
+        Source badges come in two kinds, and the difference is the only thing
+        they have to communicate: a source the game can be installed from, and
+        one that merely describes it. Drawn identically — as they were — a
+        metadata-only entry reads as somewhere to get the game, which is the
+        precise misunderstanding the label was written to avoid.
+
+        So the supplying kind is given the accent treatment and the describing
+        kind is deliberately quiet. Both keep a border, because a filled pill
+        and an outlined one stay distinguishable when the difference in hue
+        does not survive a person's eyesight or a cheap panel.
+    -->
+    <Style x:Key="SourceBadgeStyle" TargetType="Border" BasedOn="{StaticResource BadgeStyle}">
+        <Setter Property="Background" Value="{StaticResource AccentDeepBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource AccentDimBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style x:Key="SourceBadgeTextStyle" TargetType="TextBlock" BasedOn="{StaticResource BadgeTextStyle}">
+        <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="MetadataBadgeStyle" TargetType="Border" BasedOn="{StaticResource BadgeStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
     <!-- The row a download occupies in the queue. -->
     <Style x:Key="DownloadRowStyle" TargetType="Border">
         <Setter Property="Margin" Value="0,0,0,10" />

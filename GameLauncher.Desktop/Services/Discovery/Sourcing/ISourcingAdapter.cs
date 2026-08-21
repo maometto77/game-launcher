@@ -36,10 +36,21 @@ public enum SourcingRefusal
 /// <param name="Downloads">Addresses the game can be fetched from, best first.</param>
 /// <param name="Refusal">Why nothing was produced, when <paramref name="Downloads"/> is empty.</param>
 /// <param name="Explanation">A sentence a person can act on, or <see langword="null"/>.</param>
+/// <param name="Priority">
+/// Overrides <see cref="ISourcingAdapter.Priority"/> for these addresses, or
+/// <see langword="null"/> to use the adapter's own.
+/// </param>
+/// <remarks>
+/// The override exists because one adapter can answer on behalf of many
+/// configurations. The scriptable adapter serves every manifest in the adapter
+/// folder, and those carry their own priorities, so a single number on the
+/// adapter could not express what any of them asked for.
+/// </remarks>
 public sealed record SourcingPayload(
     IReadOnlyList<ListingDownload> Downloads,
     SourcingRefusal Refusal = SourcingRefusal.None,
-    string? Explanation = null)
+    string? Explanation = null,
+    int? Priority = null)
 {
     /// <summary>An empty payload for an address no adapter handles.</summary>
     public static SourcingPayload Unsupported { get; } =
@@ -75,11 +86,58 @@ public interface ISourcingAdapter
     string DisplayName { get; }
 
     /// <summary>
+    /// Where this adapter's addresses land in the merged mirror list; higher is
+    /// tried first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Zero is the baseline every adapter shipped with this launcher sits at, so
+    /// a user's own feed can be placed deliberately above it or below it rather
+    /// than only ahead of it. A manifest asking for 100 leads; one asking for
+    /// -10 is kept as a last resort behind everything built in.
+    /// </para>
+    /// <para>
+    /// Equal numbers are broken by registration order, which puts the scriptable
+    /// adapter — and therefore anything hand-written — ahead of the built-ins.
+    /// Something the user wrote themselves is the better guess at what they
+    /// meant when nothing else distinguishes the two.
+    /// </para>
+    /// </remarks>
+    int Priority => 0;
+
+    /// <summary>
     /// Determines whether this adapter handles an address.
     /// </summary>
     /// <param name="url">The page address.</param>
     /// <returns><see langword="true"/> when it does.</returns>
+    /// <remarks>
+    /// May guess optimistically. An adapter whose configuration lives on disk
+    /// cannot answer synchronously before it has read it, and on the install
+    /// path a wrong yes costs one call that declines whereas a wrong no costs
+    /// the download.
+    /// </remarks>
     bool CanHandle(string url);
+
+    /// <summary>
+    /// Determines whether this adapter certainly handles an address.
+    /// </summary>
+    /// <param name="url">The page address.</param>
+    /// <returns><see langword="true"/> only when it is known to.</returns>
+    /// <remarks>
+    /// <para>
+    /// The same question as <see cref="CanHandle"/> with the opposite bias, for
+    /// callers where a wrong yes is the expensive answer. Deciding whether to
+    /// advertise a listing as installable is one: promising a download that
+    /// turns out not to exist is worse than quietly omitting one that did, since
+    /// the first wastes someone's time and the second is corrected by the next
+    /// import.
+    /// </para>
+    /// <para>
+    /// Defaults to <see cref="CanHandle"/>, which is right for every adapter
+    /// that already answers from knowledge.
+    /// </para>
+    /// </remarks>
+    bool DefinitelyHandles(string url) => CanHandle(url);
 
     /// <summary>
     /// Works out what can be downloaded from a page.

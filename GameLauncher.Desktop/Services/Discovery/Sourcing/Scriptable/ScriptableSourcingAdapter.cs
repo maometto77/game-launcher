@@ -96,6 +96,23 @@ public sealed class ScriptableSourcingAdapter : ISourcingAdapter
         return _manifests.Cached is not { } loaded || Find(loaded, parsed) is not null;
     }
 
+    /// <summary>
+    /// Answers only from manifests already read, never from the guess above.
+    /// </summary>
+    /// <param name="url">The page address.</param>
+    /// <returns><see langword="true"/> only when a loaded manifest claims it.</returns>
+    /// <remarks>
+    /// Before the folder has been read this says no, which is the safe direction
+    /// for the callers that use it. Advertising every listing as installable
+    /// because the manifests happened not to be loaded yet would be exactly the
+    /// wrong way to be wrong.
+    /// </remarks>
+    public bool DefinitelyHandles(string url) =>
+        !string.IsNullOrWhiteSpace(url) &&
+        Uri.TryCreate(url, UriKind.Absolute, out var parsed) &&
+        _manifests.Cached is { } loaded &&
+        Find(loaded, parsed) is not null;
+
     /// <inheritdoc />
     public async Task<SourcingPayload> ExtractDownloadPayloadAsync(
         CatalogListing listing,
@@ -189,10 +206,12 @@ public sealed class ScriptableSourcingAdapter : ISourcingAdapter
         }
 
         _logger.LogInformation(
-            "Feed '{Key}' supplied {Count} address(es) for '{Title}'.",
-            manifest.Key, downloads.Count, listing.Title);
+            "Feed '{Key}' supplied {Count} address(es) for '{Title}' at priority {Priority}.",
+            manifest.Key, downloads.Count, listing.Title, manifest.Priority);
 
-        return new SourcingPayload(downloads);
+        // The manifest's own number, not this adapter's. One adapter serves every
+        // feed in the folder, and they do not agree about where they belong.
+        return new SourcingPayload(downloads, Priority: manifest.Priority);
     }
 
     /// <summary>
@@ -301,12 +320,17 @@ public sealed class ScriptableSourcingAdapter : ISourcingAdapter
     /// <param name="address">The address to match.</param>
     /// <returns>The manifest, or <see langword="null"/>.</returns>
     /// <remarks>
-    /// First match wins, in file-name order. A deterministic rule beats a
-    /// cleverer one here: when two manifests overlap, the person who wrote them
-    /// can rename a file and know what will happen.
+    /// Highest priority wins, and file-name order breaks a tie. Both halves
+    /// matter: the number is how someone says which of two overlapping feeds
+    /// they meant, and the name is so that leaving the numbers alone still
+    /// gives an answer they can predict and change by renaming a file.
     /// </remarks>
     private static FeedManifest? Find(IReadOnlyList<FeedManifest> manifests, Uri address) =>
-        manifests.FirstOrDefault(manifest => Claims(manifest, address));
+        manifests
+            .Where(manifest => Claims(manifest, address))
+            .OrderByDescending(manifest => manifest.Priority)
+            .ThenBy(manifest => manifest.SourcePath, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
 
     /// <summary>Determines whether one manifest claims an address.</summary>
     /// <param name="manifest">The manifest.</param>

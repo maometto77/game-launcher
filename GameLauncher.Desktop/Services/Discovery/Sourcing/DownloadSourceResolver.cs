@@ -120,11 +120,34 @@ public sealed class DownloadSourceResolver : IDownloadSourceResolver
     }
 
     /// <summary>
-    /// Asks each adapter that handles one of the listing's source pages.
+    /// Asks every adapter that handles one of the listing's source pages.
     /// </summary>
     /// <param name="listing">The listing being installed.</param>
     /// <param name="cancellationToken">Cancels the work.</param>
-    /// <returns>The first payload produced, or the most informative refusal.</returns>
+    /// <returns>Every address found, ranked, or the most informative refusal.</returns>
+    /// <remarks>
+    /// <para>
+    /// All of them, not the first that answers, and their addresses are merged
+    /// into one ranked list rather than one winning. A download that fails
+    /// halfway is the ordinary case for the hosts this launcher fetches from,
+    /// and the transfer only survives it if the next mirror is already on the
+    /// row. Discarding the other adapters' answers threw away exactly the
+    /// alternates that make an install resilient.
+    /// </para>
+    /// <para>
+    /// Asked concurrently, because they are independent network calls against
+    /// different hosts and the aggregate needs all of them regardless. Ordering
+    /// is decided afterwards from the priorities, never from which answered
+    /// first — a mirror list that reshuffled itself according to network weather
+    /// would make a failing install impossible to reason about.
+    /// </para>
+    /// <para>
+    /// Every adapter is asked even when an earlier one succeeded, which costs a
+    /// request that the old short circuit saved. That is the price of the
+    /// fallback list, and it is only paid by listings whose own downloads are
+    /// missing — the common path returns before this is ever called.
+    /// </para>
+    /// </remarks>
     private async Task<SourcingPayload> AskAdaptersAsync(
         CatalogListing listing,
         CancellationToken cancellationToken)
@@ -133,52 +156,160 @@ public sealed class DownloadSourceResolver : IDownloadSourceResolver
             .GetSourceListingsAsync(listing.ListingId, cancellationToken)
             .ConfigureAwait(false);
 
-        SourcingPayload? refusal = null;
+        var asked = new List<Task<AdapterAnswer>>();
 
         foreach (var record in records)
         {
             var url = record.SourceUrl.AbsoluteUri;
-            var adapter = _adapters.FirstOrDefault(candidate => candidate.CanHandle(url));
 
-            if (adapter is null)
+            for (var index = 0; index < _adapters.Count; index++)
             {
-                continue;
-            }
+                var adapter = _adapters[index];
 
-            SourcingPayload payload;
-
-            try
-            {
-                payload = await adapter
-                    .ExtractDownloadPayloadAsync(listing, url, cancellationToken)
-                    .ConfigureAwait(false);
+                if (adapter.CanHandle(url))
+                {
+                    asked.Add(AskOneAsync(adapter, index, listing, url, cancellationToken));
+                }
             }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                // One adapter failing must not stop the others, for the same
-                // reason a throwing achievement provider does not stop a pass.
-                _logger.LogWarning(ex, "{Adapter} failed for '{Title}'.", adapter.DisplayName, listing.Title);
-
-                refusal ??= new SourcingPayload([], SourcingRefusal.Unreachable, ex.Message);
-                continue;
-            }
-
-            if (payload.HasDownloads)
-            {
-                return payload;
-            }
-
-            // Kept so the caller can be told why, rather than only that nothing
-            // was found. The first refusal wins: it is the listing's own source.
-            refusal ??= payload;
         }
 
-        return refusal ?? SourcingPayload.Unsupported;
+        if (asked.Count == 0)
+        {
+            return SourcingPayload.Unsupported;
+        }
+
+        var answers = await Task.WhenAll(asked).ConfigureAwait(false);
+
+        // Priority first, then registration order. Registration order is what
+        // puts a hand-written feed ahead of a built-in that asked for the same
+        // number, and it is stable, so the same catalogue produces the same
+        // mirror list on every machine.
+        var ranked = answers
+            .OrderByDescending(answer => answer.Priority)
+            .ThenBy(answer => answer.Index)
+            .ToArray();
+
+        var downloads = Merge(ranked);
+
+        if (downloads.Count > 0)
+        {
+            _logger.LogInformation(
+                "Sourcing '{Title}' produced {Count} address(es) from {Adapters} adapter(s).",
+                listing.Title,
+                downloads.Count,
+                ranked.Count(answer => answer.Payload is { HasDownloads: true }));
+
+            return new SourcingPayload(downloads);
+        }
+
+        // Nothing was found, so the best available explanation is what is left to
+        // report. "I do not handle this address" is the absence of one, and
+        // letting it win would hide a real refusal from an adapter that does.
+        var explained = ranked.FirstOrDefault(answer =>
+            answer.Payload is { } payload &&
+            payload.Refusal is not (SourcingRefusal.None or SourcingRefusal.Unsupported));
+
+        return explained?.Payload ?? SourcingPayload.Unsupported;
     }
+
+    /// <summary>
+    /// Merges every adapter's addresses into one ranked list.
+    /// </summary>
+    /// <param name="answers">The answers, already in the order they should rank.</param>
+    /// <returns>The merged rows, renumbered from zero.</returns>
+    /// <remarks>
+    /// <para>
+    /// Duplicates are dropped rather than kept, and the first occurrence wins —
+    /// which, given the ordering, is the highest-priority adapter that offered
+    /// it. Two adapters describing the same host frequently produce the same
+    /// address; keeping both would have aria2c retry a URL that just failed and
+    /// call it a fallback.
+    /// </para>
+    /// <para>
+    /// <see cref="ListingDownload.MirrorRank"/> is renumbered across the whole
+    /// merged list. Each adapter numbers its own rows from zero, so leaving them
+    /// alone would give several rows the same rank and lose the ordering this
+    /// method exists to establish.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<ListingDownload> Merge(IReadOnlyList<AdapterAnswer> answers)
+    {
+        var merged = new List<ListingDownload>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var answer in answers)
+        {
+            if (answer.Payload is not { HasDownloads: true } payload)
+            {
+                continue;
+            }
+
+            foreach (var download in payload.Downloads)
+            {
+                if (string.IsNullOrWhiteSpace(download.Url) || !seen.Add(download.Url))
+                {
+                    continue;
+                }
+
+                download.MirrorRank = merged.Count;
+                merged.Add(download);
+            }
+        }
+
+        return merged;
+    }
+
+    /// <summary>
+    /// Asks one adapter, turning a failure into an answer rather than a throw.
+    /// </summary>
+    /// <param name="adapter">The adapter to ask.</param>
+    /// <param name="index">Its registration position, used to break priority ties.</param>
+    /// <param name="listing">The listing being installed.</param>
+    /// <param name="url">The page address it claimed.</param>
+    /// <param name="cancellationToken">Cancels the work.</param>
+    /// <returns>What it said.</returns>
+    /// <remarks>
+    /// One adapter failing must not stop the others, for the same reason a
+    /// throwing achievement provider does not stop a pass. With the calls now
+    /// running together that matters more, not less: <c>Task.WhenAll</c> surfaces
+    /// one exception and abandons the rest of the results, so a single
+    /// unreachable host would otherwise lose every mirror found alongside it.
+    /// </remarks>
+    private async Task<AdapterAnswer> AskOneAsync(
+        ISourcingAdapter adapter,
+        int index,
+        CatalogListing listing,
+        string url,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var payload = await adapter
+                .ExtractDownloadPayloadAsync(listing, url, cancellationToken)
+                .ConfigureAwait(false);
+
+            return new AdapterAnswer(payload.Priority ?? adapter.Priority, index, payload);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "{Adapter} failed for '{Title}'.", adapter.DisplayName, listing.Title);
+
+            return new AdapterAnswer(
+                adapter.Priority,
+                index,
+                new SourcingPayload([], SourcingRefusal.Unreachable, ex.Message));
+        }
+    }
+
+    /// <summary>What one adapter said, with what it takes to rank it.</summary>
+    /// <param name="Priority">Effective priority, the payload's own or the adapter's.</param>
+    /// <param name="Index">Registration position, breaking ties between equal priorities.</param>
+    /// <param name="Payload">What it produced.</param>
+    private sealed record AdapterAnswer(int Priority, int Index, SourcingPayload? Payload);
 
     /// <summary>
     /// Looks for the same game described by another listing that has a download.

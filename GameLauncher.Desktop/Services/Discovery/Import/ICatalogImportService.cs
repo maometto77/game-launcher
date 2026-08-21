@@ -17,6 +17,16 @@ public sealed record ImportRunOptions
     public int MaxItems { get; init; }
 
     /// <summary>
+    /// Free text to search for, or <see langword="null"/> for a whole pass.
+    /// </summary>
+    /// <remarks>
+    /// Only meaningful with <see cref="ImportMode.Search"/>. Handed to every
+    /// source that can narrow by it; the rest ignore it, which is why a search
+    /// also caps <see cref="MaxItems"/> rather than trusting them all to.
+    /// </remarks>
+    public string? Query { get; init; }
+
+    /// <summary>
     /// Whether to record how each merge rule reached its decision.
     /// </summary>
     /// <remarks>

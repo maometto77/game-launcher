@@ -16,6 +16,7 @@ using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sourcing;
 using GameLauncher.Desktop.Services.Discovery.Sourcing.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources;
+using GameLauncher.Desktop.Services.Discovery.Sources.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources.SharedCatalog;
 using GameLauncher.Desktop.Services.Download;
 using GameLauncher.Desktop.Services.Downloads;
@@ -213,6 +214,21 @@ public static class ServiceRegistration
         // until a feed address is configured, so it costs nothing to register.
         services.AddSingleton<ICatalogSource, SharedCatalogSource>();
 
+        // The other half of a feed manifest: not only "what can this listing be
+        // downloaded from" but "what games are there". Without it a manifest is
+        // inert until some other source has already filled the catalogue, which
+        // is the most confusing thing about writing one.
+        services.AddSingleton<ICatalogSource, ScriptableCatalogSource>();
+
+        services.AddHttpClient(ScriptableCatalogSource.HttpClientName, client =>
+        {
+            // A catalogue document is larger than a per-listing lookup and may
+            // be served by a small machine, so this is more generous than the
+            // sourcing client's.
+            client.Timeout = TimeSpan.FromSeconds(60);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        });
+
         // Honouring robots.txt is what separates importing a catalogue from
         // taking whatever a server will serve. Shared, and cached per host.
         services.AddSingleton<IRobotsPolicy, RobotsPolicy>();
@@ -246,16 +262,24 @@ public static class ServiceRegistration
         // Sourcing adapters answer "given this page, what can be downloaded" —
         // a different question from "what games exist", with different failure
         // modes, which is why they are a separate open set from ICatalogSource.
-        services.AddSingleton<ISourcingAdapter, InternetArchiveSourcingAdapter>();
-        services.AddSingleton<ISourcingAdapter, MyAbandonwareSourcingAdapter>();
-
         // The user's own feeds. One adapter serving any number of manifests
         // dropped into the adapter directory, so adding a source is a file
         // rather than a class — the feeds worth having are the ones nobody here
         // has heard of.
+        //
+        // Registered ahead of the built-ins deliberately: the resolver asks
+        // adapters in this order, so a manifest someone wrote by hand for a host
+        // this launcher already knows takes precedence over the shipped answer.
+        // That is the ordinary rule that configuration beats defaults, and
+        // without it a manifest naming archive.org would be a file that quietly
+        // did nothing. Nothing is lost when it declines — the resolver falls
+        // through to the built-in adapter below.
         services.AddSingleton<IFeedManifestStore, FeedManifestStore>();
         services.AddSingleton<IScriptHookRunner, ScriptHookRunner>();
         services.AddSingleton<ISourcingAdapter, ScriptableSourcingAdapter>();
+
+        services.AddSingleton<ISourcingAdapter, InternetArchiveSourcingAdapter>();
+        services.AddSingleton<ISourcingAdapter, MyAbandonwareSourcingAdapter>();
 
         services.AddHttpClient(ScriptableSourcingAdapter.HttpClientName, client =>
         {

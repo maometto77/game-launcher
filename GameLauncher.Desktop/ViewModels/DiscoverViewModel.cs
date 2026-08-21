@@ -36,6 +36,15 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     /// <summary>How many tiles are fetched at a time.</summary>
     private const int PageSize = 60;
 
+    /// <summary>How many items one online search imports from each source.</summary>
+    /// <remarks>
+    /// A search is meant to find a game, not to import a collection. The cap
+    /// also bounds what a source that ignores the search term can do in answer
+    /// to one — without it, searching for "doom" against a source that cannot
+    /// narrow would begin a full import of several thousand records.
+    /// </remarks>
+    private const int OnlineSearchLimit = 40;
+
     private readonly ICatalogListingRepository _listings;
     private readonly IListingImageCache _images;
     private readonly IListingInstallService _install;
@@ -212,6 +221,48 @@ public sealed partial class DiscoverViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Queues a listing, trying one particular source first.
+    /// </summary>
+    /// <param name="badge">The source badge that was pressed.</param>
+    /// <remarks>
+    /// <para>
+    /// The plain Install button takes the addresses in the order the catalogue
+    /// ranked them. This is for the case where someone knows better — a mirror
+    /// that is fast from where they are, or the one copy of a game whose other
+    /// sources hold a different release.
+    /// </para>
+    /// <para>
+    /// A preference reorders rather than restricts, so the other sources remain
+    /// behind the chosen one as fallbacks. Choosing a source should not be a way
+    /// to make an install fail.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private void InstallFromSource(SourceBadge? badge)
+    {
+        if (badge is not { CanInstallFrom: true })
+        {
+            return;
+        }
+
+        var item = ListingsView.FirstOrDefault(candidate =>
+            string.Equals(candidate.ListingId, badge.ListingId, StringComparison.Ordinal));
+
+        if (item is null)
+        {
+            return;
+        }
+
+        ClearError();
+
+        var job = _queue.Enqueue(item.ListingId, item.Title, badge.SourceKey);
+
+        item.ApplyQueueState(job);
+
+        StatusMessage = $"'{item.Title}' queued, trying {badge.Label} first.";
+    }
+
+    /// <summary>
     /// Starts a catalogue refresh by hand.
     /// </summary>
     /// <returns>A task that completes when the refresh finishes.</returns>
@@ -247,6 +298,95 @@ public sealed partial class DiscoverViewModel : ViewModelBase
         {
             _logger.LogError(ex, "A manual catalogue refresh failed.");
             SetErrorMessage($"The refresh failed: {ex.Message}");
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Asks every source that can search for what is in the search box.
+    /// </summary>
+    /// <returns>A task that completes when the results are on screen.</returns>
+    /// <remarks>
+    /// <para>
+    /// Deliberately a gesture rather than something typing triggers. The grid
+    /// itself reads the local catalogue, which is instant and costs nobody
+    /// anything; reaching out to every configured source is neither, and doing
+    /// it on each keystroke would put a request to a third party behind every
+    /// letter of every search. This launcher does not fetch until it is asked,
+    /// and a search box is not asking.
+    /// </para>
+    /// <para>
+    /// What comes back is imported through the ordinary pipeline — normalised,
+    /// matched against what is already held, merged — and then the local query
+    /// is simply run again. Results therefore arrive already deduplicated
+    /// against the catalogue and against each other, and a game two sources both
+    /// describe appears once, better described for having been found twice. A
+    /// separate "search results" collection living beside the catalogue would
+    /// have had to reimplement all of that, and worse.
+    /// </para>
+    /// </remarks>
+    [RelayCommand]
+    private async Task SearchOnlineAsync()
+    {
+        if (SearchText is not { } text || string.IsNullOrWhiteSpace(text))
+        {
+            StatusMessage = "Type something to search for first.";
+            return;
+        }
+
+        if (_import.IsRunning)
+        {
+            StatusMessage = "A catalogue refresh is already running.";
+            return;
+        }
+
+        // Said plainly rather than left to look like a search that found nothing.
+        // With discovery switched off there is no source to ask, and "no results
+        // for doom" would send someone looking for a better search term when the
+        // answer is one checkbox away.
+        if (!_import.Sources.Any(source => source.IsAvailable))
+        {
+            SetErrorMessage(
+                "No source is configured to search. Turn discovery on in Settings and choose a collection.");
+
+            return;
+        }
+
+        IsBusy = true;
+        ClearError();
+
+        try
+        {
+            var progress = new Progress<ImportProgress>(update => StatusMessage = update.Message);
+
+            // Capped, because a source that cannot narrow by the term ignores it
+            // and would otherwise enumerate its whole collection in answer to a
+            // search for one game.
+            var result = await _import
+                .RunAsync(
+                    new ImportRunOptions
+                    {
+                        Mode = ImportMode.Search,
+                        Query = text,
+                        MaxItems = OnlineSearchLimit
+                    },
+                    progress)
+                .ConfigureAwait(true);
+
+            StatusMessage = result.HasChanges
+                ? $"Found {result.ListingsAdded} new and updated {result.ItemsChanged - result.ListingsAdded}."
+                : $"Nothing new for '{text.Trim()}'.";
+
+            await LoadFacetsAsync(CancellationToken.None).ConfigureAwait(true);
+            await QueryAsync(reset: true, CancellationToken.None).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Searching sources for '{Query}' failed.", text);
+            SetErrorMessage($"The search failed: {ex.Message}");
         }
         finally
         {

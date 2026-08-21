@@ -31,8 +31,20 @@ public sealed class ListingCardTests
         // Both, not just the one that won the merge: a card showing where a game
         // can be found has to show all of them.
         Assert.Equal(2, card.SourceBadges.Count);
-        Assert.Contains("Archive.org", card.SourceBadges);
+        Assert.Contains(card.SourceBadges, badge => badge.Label == "Archive.org");
         Assert.True(card.HasSourceBadges);
+
+        // The Archive can supply the file, so its badge is not the quiet kind.
+        var archive = card.SourceBadges.Single(badge => badge.Label == "Archive.org");
+
+        Assert.False(archive.IsMetadataOnly);
+        Assert.True(archive.CanInstallFrom);
+
+        // A pressed badge is the whole instruction: which source, and for which
+        // listing. Without both it would have to reach back up the visual tree
+        // for the other half of what it means.
+        Assert.Equal(InternetArchiveCatalogSource.SourceKey, archive.SourceKey);
+        Assert.Equal("lst_1", archive.ListingId);
     }
 
     [Fact]
@@ -48,8 +60,14 @@ public sealed class ListingCardTests
         var card = new ListingItemViewModel(reloaded!, host.Resolve<IListingImageCache>());
 
         // A badge implying the game can be fetched from a site whose own rules
-        // disallow it would be misleading.
-        Assert.Contains("metadata", card.SourceBadges.Single(), StringComparison.OrdinalIgnoreCase);
+        // disallow it would be misleading — in its wording and in how it is drawn.
+        var badge = card.SourceBadges.Single();
+
+        Assert.Contains("metadata", badge.Label, StringComparison.OrdinalIgnoreCase);
+        Assert.True(badge.IsMetadataOnly);
+
+        // And its badge is not a way to start a download that cannot happen.
+        Assert.False(badge.CanInstallFrom);
     }
 
     [Fact]
