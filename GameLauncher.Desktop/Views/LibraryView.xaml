@@ -49,7 +49,7 @@
                         Visibility="{Binding IsExecutableMissing, Converter={StaticResource BooleanToVisibility}}">
                     <TextBlock FontSize="10"
                                FontWeight="SemiBold"
-                               Foreground="White"
+                               Foreground="{StaticResource TextPrimaryBrush}"
                                Text="MISSING" />
                 </Border>
             </Grid>

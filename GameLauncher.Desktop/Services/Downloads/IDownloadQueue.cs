@@ -61,8 +61,12 @@ public interface IDownloadQueue
     /// queueing the same game twice would have two transfers writing to one
     /// <c>.part</c> file.
     /// </returns>
-    /// <exception cref="ArgumentException">Either argument is null or blank.</exception>
-    DownloadJob Enqueue(string listingId, string title);
+    /// <param name="preferredSourceKey">
+    /// A source whose addresses should be tried first, or <see langword="null"/>
+    /// to take them in the order the catalogue recorded.
+    /// </param>
+    /// <exception cref="ArgumentException">Either required argument is null or blank.</exception>
+    DownloadJob Enqueue(string listingId, string title, string? preferredSourceKey = null);
 
     /// <summary>
     /// Holds a job. A running one is stopped; its partial transfer is kept.

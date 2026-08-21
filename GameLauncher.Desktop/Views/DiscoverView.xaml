@@ -29,6 +29,7 @@
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <TextBox Grid.Column="0"
@@ -49,13 +50,23 @@
                       Style="{StaticResource CheckBoxStyle}"
                       IsChecked="{Binding DownloadableOnly}" />
 
+            <!-- Reaches out to the sources; the box above only reads what is
+                 already held. Separate controls because they cost very
+                 different things. -->
             <Button Grid.Column="3"
                     Margin="14,0,0,0"
+                    Content="Search sources"
+                    Command="{Binding SearchOnlineCommand}"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    ToolTip="Ask every configured source about this search and add what it finds to the catalogue." />
+
+            <Button Grid.Column="4"
+                    Margin="10,0,0,0"
                     Content="Clear"
                     Command="{Binding ClearFiltersCommand}"
                     Style="{StaticResource SecondaryButtonStyle}" />
 
-            <Button Grid.Column="4"
+            <Button Grid.Column="5"
                     Margin="10,0,0,0"
                     Content="Refresh"
                     Command="{Binding RefreshCatalogCommand}"
@@ -143,10 +154,26 @@
                                                        TextTrimming="CharacterEllipsis" />
                                         </StackPanel>
 
-                                        <!-- Where this game can be found. -->
+                                        <!--
+                                            Where this game can be found.
+
+                                            The strip keeps its height whether it
+                                            holds none, one or two badges, and is
+                                            not collapsed when empty. A WrapPanel
+                                            of cards gives each its natural
+                                            height, so a card carrying a second
+                                            badge would otherwise sit taller than
+                                            its neighbours and push its Install
+                                            button out of line with the rest of
+                                            the row — which is what a grid of
+                                            cards is for.
+                                        -->
                                         <ItemsControl ItemsSource="{Binding SourceBadges}"
                                                       Margin="0,8,0,0"
-                                                      Visibility="{Binding HasSourceBadges, Converter={StaticResource BooleanToVisibility}}">
+                                                      Height="46"
+                                                      VerticalAlignment="Top"
+                                                      ClipToBounds="True"
+                                                      ToolTip="{Binding SourceSummary}">
                                             <ItemsControl.ItemsPanel>
                                                 <ItemsPanelTemplate>
                                                     <WrapPanel Orientation="Horizontal" />
@@ -154,10 +181,64 @@
                                             </ItemsControl.ItemsPanel>
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Style="{StaticResource BadgeStyle}">
-                                                        <TextBlock Text="{Binding}"
-                                                                   Style="{StaticResource BadgeTextStyle}" />
-                                                    </Border>
+                                                    <!--
+                                                        A badge is both a label and a way to install
+                                                        from that source in particular. Styled by
+                                                        kind: a source the game can be installed
+                                                        from is accented and pressable, one that
+                                                        only describes it stays quiet and inert.
+                                                    -->
+                                                    <Button x:Name="Pill"
+                                                            Padding="0"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            IsEnabled="{Binding CanInstallFrom}"
+                                                            ToolTip="Install from this source, keeping the others as fallbacks."
+                                                            Command="{Binding DataContext.InstallFromSourceCommand,
+                                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border x:Name="Shape"
+                                                                        Style="{StaticResource SourceBadgeStyle}">
+                                                                    <TextBlock x:Name="Label"
+                                                                               Text="{Binding Label}"
+                                                                               Style="{StaticResource SourceBadgeTextStyle}" />
+                                                                </Border>
+
+                                                                <ControlTemplate.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter TargetName="Shape"
+                                                                                Property="BorderBrush"
+                                                                                Value="{StaticResource AccentBrush}" />
+                                                                    </Trigger>
+
+                                                                    <!-- The metadata-only kind, which
+                                                                         is not pressable. -->
+                                                                    <Trigger Property="IsEnabled" Value="False">
+                                                                        <Setter TargetName="Shape"
+                                                                                Property="Style"
+                                                                                Value="{StaticResource MetadataBadgeStyle}" />
+                                                                        <Setter TargetName="Label"
+                                                                                Property="Style"
+                                                                                Value="{StaticResource BadgeTextStyle}" />
+                                                                    </Trigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+
+                                                    <DataTemplate.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMetadataOnly}" Value="True">
+                                                            <Setter TargetName="Pill"
+                                                                    Property="Cursor"
+                                                                    Value="Arrow" />
+                                                            <Setter TargetName="Pill"
+                                                                    Property="ToolTip"
+                                                                    Value="This source describes the game but cannot supply it." />
+                                                        </DataTrigger>
+                                                    </DataTemplate.Triggers>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>

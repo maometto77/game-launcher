@@ -195,6 +195,16 @@ public sealed class CatalogImportService : ICatalogImportService
             changedSince = previous.StartedAt;
         }
 
+        // A search covers whatever the term matches, which has nothing to do
+        // with where a previous pass stopped or when it ran. Resuming that
+        // cursor would search from the middle of the source, and applying the
+        // watermark would hide every matching item older than the last import.
+        if (options.Mode == ImportMode.Search)
+        {
+            resumeCursor = null;
+            changedSince = null;
+        }
+
         var runId = await _repository.StartRunAsync(source.Key, options.Mode, cancellationToken)
             .ConfigureAwait(false);
 
@@ -220,7 +230,8 @@ public sealed class CatalogImportService : ICatalogImportService
                 {
                     ChangedSince = changedSince,
                     Cursor = resumeCursor,
-                    MaxItems = options.MaxItems
+                    MaxItems = options.MaxItems,
+                    Query = options.Mode == ImportMode.Search ? options.Query : null
                 },
                 cancellationToken);
 

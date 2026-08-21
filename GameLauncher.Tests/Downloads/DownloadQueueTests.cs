@@ -376,10 +376,15 @@ public sealed class DownloadQueueTests
                 new DownloadProgress(received, total, rate, TimeSpan.FromSeconds(1))));
         }
 
-        public IReadOnlyList<ListingMirror> GetMirrors(CatalogListing listing) => [];
+        /// <summary>Preferred sources the queue passed through, by listing.</summary>
+        public Dictionary<string, string?> PreferredSources { get; } = [];
+
+        public IReadOnlyList<ListingMirror> GetMirrors(
+            CatalogListing listing, string? preferredSourceKey = null) => [];
 
         public async Task<ListingInstallResult> PrepareAsync(
             string listingId,
+            string? preferredSourceKey = null,
             IProgress<InstallProgress>? progress = null,
             CancellationToken cancellationToken = default)
         {
@@ -388,6 +393,7 @@ public sealed class DownloadQueueTests
             lock (_lock)
             {
                 Started.Add(listingId);
+                PreferredSources[listingId] = preferredSourceKey;
                 _progress[listingId] = progress;
 
                 gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

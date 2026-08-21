@@ -21,18 +21,28 @@ public sealed class ListingMerger : IListingMerger
 
     private readonly IListingNormalizer _normalizer;
     private readonly IReadOnlyDictionary<string, int> _ranks;
+    private readonly IReadOnlyList<Sourcing.ISourcingAdapter> _adapters;
 
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
     /// <param name="normalizer">Computes the match key for the merged row.</param>
     /// <param name="sources">Registered sources, read only for their ranks.</param>
+    /// <param name="adapters">
+    /// Registered sourcing adapters, read only to tell whether a listing that
+    /// published no file of its own could still be resolved to one.
+    /// </param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
-    public ListingMerger(IListingNormalizer normalizer, IEnumerable<ICatalogSource> sources)
+    public ListingMerger(
+        IListingNormalizer normalizer,
+        IEnumerable<ICatalogSource> sources,
+        IEnumerable<Sourcing.ISourcingAdapter> adapters)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(adapters);
 
         _normalizer = normalizer ?? throw new ArgumentNullException(nameof(normalizer));
+        _adapters = adapters.ToArray();
 
         // Last registration wins rather than throwing: the engine that owns the
         // duplicate-key guard is the import service, and duplicating the check
@@ -46,6 +56,20 @@ public sealed class ListingMerger : IListingMerger
 
         _ranks = ranks;
     }
+
+    /// <summary>
+    /// Determines whether an adapter could produce a download for a page.
+    /// </summary>
+    /// <param name="page">The source's own address for the item.</param>
+    /// <returns><see langword="true"/> when one certainly handles it.</returns>
+    /// <remarks>
+    /// Asks only what can be answered now. The adapters are consulted properly
+    /// at install time, where they may fetch; this is the cheap synchronous
+    /// question of whether it is worth offering the listing at all.
+    /// </remarks>
+    private bool IsResolvable(Uri? page) =>
+        page is not null &&
+        _adapters.Any(adapter => adapter.DefinitelyHandles(page.AbsoluteUri));
 
     /// <inheritdoc />
     public MergeResult Merge(
@@ -91,7 +115,21 @@ public sealed class ListingMerger : IListingMerger
 
         // Any source offering a file makes the game installable. One source
         // restricting access says nothing about another's copy.
-        var downloadable = downloads.Count > 0 && ordered.Any(source => source.IsDownloadable);
+        //
+        // A source that published no file still counts when an adapter certainly
+        // handles the page it points at, because the address is worked out at
+        // install time rather than at import: a catalogue feed listing nothing
+        // but names and Archive item pages produces perfectly installable games,
+        // and marking them otherwise hid them behind the "installable only"
+        // filter that is on by default.
+        //
+        // 'Certainly', not 'might'. An adapter that guesses would advertise a
+        // download nobody can supply, and a promise that fails at install time
+        // is worse than a listing that quietly appears once the next import
+        // knows better.
+        var downloadable = ordered.Any(source =>
+            source.IsDownloadable &&
+            (source.Downloads.Count > 0 || IsResolvable(source.SourceUrl)));
 
         var listing = new CatalogListing
         {

@@ -3,6 +3,7 @@ using GameLauncher.Desktop.Models;
 using GameLauncher.Desktop.Services.Discovery;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
+using GameLauncher.Desktop.Services.Discovery.Sourcing;
 
 namespace GameLauncher.Tests.Discovery;
 
@@ -19,9 +20,19 @@ public sealed class MatchAndMergeTests
 
     private static ListingMatcher Matcher() => new(Normalizer);
 
-    private static ListingMerger Merger() => new(
+    /// <summary>
+    /// Builds a merger over two ranked sources and whichever adapters a test cares about.
+    /// </summary>
+    /// <param name="adapters">
+    /// Sourcing adapters, which decide whether a listing that published no file
+    /// of its own is still offered as installable. Empty for most tests: they
+    /// are about the merge rules, not about what can be resolved later.
+    /// </param>
+    /// <returns>The merger.</returns>
+    private static ListingMerger Merger(params ISourcingAdapter[] adapters) => new(
         Normalizer,
-        [new StubSource(Primary, rank: 0), new StubSource(Secondary, rank: 1)]);
+        [new StubSource(Primary, rank: 0), new StubSource(Secondary, rank: 1)],
+        adapters);
 
     [Fact]
     public void An_empty_catalogue_never_matches() =>
@@ -195,6 +206,46 @@ public sealed class MatchAndMergeTests
     }
 
     [Fact]
+    public void A_listing_an_adapter_can_resolve_is_offered_without_its_own_file()
+    {
+        // A catalogue feed that lists names and pages, leaving the addresses to
+        // be worked out at install time. Marking these uninstallable hid them
+        // behind Discover's "installable only" filter, which is on by default —
+        // so a perfectly good feed looked like it had imported nothing.
+        var result = Merger(new StubAdapter(definitely: true))
+            .Merge("lst_1", [Listing("Doom", 1993) with { Downloads = [] }]);
+
+        Assert.True(result.Listing.IsDownloadable);
+    }
+
+    [Fact]
+    public void An_adapter_that_only_might_handle_a_page_does_not_offer_it()
+    {
+        // The scriptable adapter answers CanHandle before it has read the
+        // adapter folder and deliberately guesses yes, which is right on the
+        // install path and wrong here: every listing in the catalogue would be
+        // advertised as installable because the manifests were not loaded yet.
+        var result = Merger(new StubAdapter(definitely: false, canHandle: true))
+            .Merge("lst_1", [Listing("Doom", 1993) with { Downloads = [] }]);
+
+        Assert.False(result.Listing.IsDownloadable);
+    }
+
+    [Fact]
+    public void A_source_that_forbids_downloading_is_not_rescued_by_an_adapter()
+    {
+        // MyAbandonware's own rules disallow the path. An adapter claiming the
+        // host does not change that, and offering the listing anyway would
+        // promise a download the site has refused.
+        var result = Merger(new StubAdapter(definitely: true)).Merge("lst_1",
+        [
+            Listing("Doom", 1993) with { Downloads = [], IsDownloadable = false }
+        ]);
+
+        Assert.False(result.Listing.IsDownloadable);
+    }
+
+    [Fact]
     public void One_source_restricting_access_does_not_restrict_anothers_copy()
     {
         var result = Merger().Merge("lst_1",
@@ -316,6 +367,31 @@ public sealed class MatchAndMergeTests
         Year = year,
         MatchKey = TitleNormalizer.ComputeMatchKey(title, year)
     };
+
+    /// <summary>
+    /// An adapter that exists only to answer the two handling questions.
+    /// </summary>
+    /// <param name="definitely">What <see cref="ISourcingAdapter.DefinitelyHandles"/> says.</param>
+    /// <param name="canHandle">
+    /// What the optimistic <see cref="ISourcingAdapter.CanHandle"/> says, which
+    /// the merger must not consult.
+    /// </param>
+    private sealed class StubAdapter(bool definitely, bool canHandle = true) : ISourcingAdapter
+    {
+        public string Key => "stub";
+
+        public string DisplayName => "Stub adapter";
+
+        public bool CanHandle(string url) => canHandle;
+
+        public bool DefinitelyHandles(string url) => definitely;
+
+        public Task<SourcingPayload> ExtractDownloadPayloadAsync(
+            CatalogListing listing,
+            string url,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(SourcingPayload.Unsupported);
+    }
 
     /// <summary>A source that exists only to carry a key and a rank.</summary>
     private sealed class StubSource(string key, int rank) : ICatalogSource

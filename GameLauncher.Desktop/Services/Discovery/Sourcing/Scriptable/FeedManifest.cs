@@ -143,6 +143,168 @@ public sealed class FeedTransform
 }
 
 /// <summary>
+/// Which field of a catalogue item supplies each part of a listing.
+/// </summary>
+/// <remarks>
+/// Only <see cref="Title"/> is required. A feed that lists nothing but names is
+/// still a catalogue — the launcher can find the game, and one of the sourcing
+/// adapters can work out how to fetch it.
+/// </remarks>
+public sealed class FeedCatalogMap
+{
+    /// <summary>Path to the item's title. Required.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>Path to the source's own identifier for the item.</summary>
+    /// <remarks>
+    /// Defaults to the title when absent. It only has to be stable and unique
+    /// within this feed: it is how a re-import recognises an item it has already
+    /// seen rather than adding it twice.
+    /// </remarks>
+    public string? Id { get; set; }
+
+    /// <summary>Path to the release year, as a number.</summary>
+    public string? Year { get; set; }
+
+    /// <summary>
+    /// Path to a publication timestamp.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the common case of a feed that dates its entries rather than
+    /// numbering their year — <c>2026-01-17T16:44:40Z</c> and
+    /// <c>2025-10-04 16:52:20</c> are both read. Mapping <see cref="Year"/> at
+    /// a field like that yields nothing, because a year is parsed as a number
+    /// and a timestamp is not one.
+    /// </para>
+    /// <para>
+    /// Worth mapping for two separate reasons. It supplies the year when the
+    /// feed has no plain one, which the matcher uses to tell a remake from an
+    /// original; and it becomes the observation's change stamp, which is how an
+    /// incremental import knows an entry has been edited since it was last
+    /// read. Without it every pass re-reads the whole feed.
+    /// </para>
+    /// </remarks>
+    public string? PubDate { get; set; }
+
+    /// <summary>Path to a description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Path to the developer.</summary>
+    public string? Developer { get; set; }
+
+    /// <summary>Path to the publisher.</summary>
+    public string? Publisher { get; set; }
+
+    /// <summary>Path to a cover image address.</summary>
+    public string? CoverUrl { get; set; }
+
+    /// <summary>Path to the item's own page, where the feed publishes one.</summary>
+    public string? Page { get; set; }
+
+    /// <summary>Path to a direct download address, where the feed has one.</summary>
+    public string? DownloadUrl { get; set; }
+
+    /// <summary>Path to the download's size in bytes.</summary>
+    public string? SizeBytes { get; set; }
+
+    /// <summary>Path to a SHA-256 digest in hex.</summary>
+    public string? Sha256 { get; set; }
+
+    /// <summary>Path to a SHA-1 digest in hex.</summary>
+    public string? Sha1 { get; set; }
+
+    /// <summary>Path to an MD5 digest in hex.</summary>
+    public string? Md5 { get; set; }
+
+    /// <summary>Path to the download's file name.</summary>
+    public string? FileName { get; set; }
+}
+
+/// <summary>
+/// How a manifest fills the catalogue, as opposed to how it supplies downloads.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The two halves answer different questions and a manifest may do either or
+/// both. <c>match</c> and <c>map</c> say "given this listing, what can be
+/// downloaded"; this says "what games exist". A manifest with only the first is
+/// inert until something else has already put listings in the catalogue, which
+/// is the single most confusing thing about writing one.
+/// </para>
+/// <para>
+/// Deliberately its own section rather than reusing the sourcing request. That
+/// one is per-listing and substitutes <c>{title}</c> into a lookup; this one is
+/// fetched once and returns many items. Sharing the fields would have meant one
+/// URL trying to be both.
+/// </para>
+/// </remarks>
+public sealed class FeedCatalog
+{
+    /// <summary>Whether this manifest contributes to the catalogue at all.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Where the list of games comes from.</summary>
+    public FeedRequest Request { get; set; } = new();
+
+    /// <summary>The payload's shape.</summary>
+    public FeedFormat Format { get; set; } = FeedFormat.Json;
+
+    /// <summary>Path to the list of items within the payload.</summary>
+    public string Items { get; set; } = string.Empty;
+
+    /// <summary>Which field of an item supplies each part of a listing.</summary>
+    public FeedCatalogMap Map { get; set; } = new();
+
+    /// <summary>An optional external program run over the payload first.</summary>
+    public FeedTransform? Transform { get; set; }
+
+    /// <summary>
+    /// Address template for an item's page, with <c>{id}</c> substituted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the common case of a feed that publishes identifiers rather than
+    /// addresses. <c>https://archive.org/details/{id}</c> turns one into the
+    /// other, and the mapping language cannot: it walks a payload, it does not
+    /// build strings.
+    /// </para>
+    /// <para>
+    /// Worth getting right, because this address is what the sourcing adapters
+    /// dispatch on. A feed that only lists names can still produce installable
+    /// listings, as long as the page it points at is one some adapter handles.
+    /// </para>
+    /// </remarks>
+    public string? PageTemplate { get; set; }
+
+    /// <summary>
+    /// Lists what is wrong with this section.
+    /// </summary>
+    /// <returns>Problems found, empty when it is usable.</returns>
+    public IReadOnlyList<string> Validate()
+    {
+        var problems = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(Request.Url))
+        {
+            problems.Add("'catalog.request.url' is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(Map.Title))
+        {
+            problems.Add("'catalog.map.title' is required — a listing with no name is not a listing.");
+        }
+
+        if (Transform is { } transform && string.IsNullOrWhiteSpace(transform.Command))
+        {
+            problems.Add("'catalog.transform.command' is required when a transform is declared.");
+        }
+
+        return problems;
+    }
+}
+
+/// <summary>
 /// One user-supplied sourcing feed, read from the adapter directory.
 /// </summary>
 /// <remarks>
@@ -171,6 +333,24 @@ public sealed class FeedManifest
     /// <summary>Whether this manifest is used at all.</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Where this feed's addresses land in the merged mirror list; higher first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to 100, which is above the zero every built-in adapter sits at.
+    /// Someone who wrote a manifest for a host this launcher already handles
+    /// meant it to be used, and having to say so twice — once by writing the
+    /// file and again by numbering it — would be a poor default.
+    /// </para>
+    /// <para>
+    /// Lower it to place a feed behind the built-ins. A negative value is
+    /// perfectly reasonable and means "only if nothing else worked", which is
+    /// what a slow mirror or a flaky home server is worth.
+    /// </para>
+    /// </remarks>
+    public int Priority { get; set; } = 100;
+
     /// <summary>Which addresses it claims.</summary>
     public FeedMatch Match { get; set; } = new();
 
@@ -196,6 +376,20 @@ public sealed class FeedManifest
     /// <summary>An optional external program run over the payload first.</summary>
     public FeedTransform? Transform { get; set; }
 
+    /// <summary>
+    /// How this manifest fills the catalogue, when it does.
+    /// </summary>
+    /// <remarks>
+    /// Absent on a manifest that only supplies downloads for listings some other
+    /// source found. Present, it makes the same file a catalogue source in its
+    /// own right, which is what stops a hand-written feed being inert until
+    /// something else has populated the catalogue first.
+    /// </remarks>
+    public FeedCatalog? Catalog { get; set; }
+
+    /// <summary>Gets a value indicating whether this manifest fills the catalogue.</summary>
+    public bool ProvidesCatalog => Catalog is { Enabled: true };
+
     /// <summary>File this manifest was read from, for diagnostics.</summary>
     public string SourcePath { get; set; } = string.Empty;
 
@@ -217,24 +411,46 @@ public sealed class FeedManifest
             problems.Add("'key' is required.");
         }
 
-        if (Match.Hosts.Count == 0)
-        {
-            problems.Add("'match.hosts' must name at least one host.");
-        }
+        // A manifest may fill the catalogue, supply downloads, or both, so the
+        // sourcing half is only required of a file that claims to do the second.
+        // Demanding it of a catalogue-only feed would mean writing a 'map.url'
+        // that nothing ever reads.
+        var providesSourcing =
+            Match.Hosts.Count > 0 ||
+            !string.IsNullOrWhiteSpace(Request.Url) ||
+            !string.IsNullOrWhiteSpace(Map.Url);
 
-        if (string.IsNullOrWhiteSpace(Request.Url))
+        if (providesSourcing)
         {
-            problems.Add("'request.url' is required.");
-        }
+            if (Match.Hosts.Count == 0)
+            {
+                problems.Add("'match.hosts' must name at least one host.");
+            }
 
-        if (string.IsNullOrWhiteSpace(Map.Url))
+            if (string.IsNullOrWhiteSpace(Request.Url))
+            {
+                problems.Add("'request.url' is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(Map.Url))
+            {
+                problems.Add("'map.url' is required — a feed with no address supplies nothing.");
+            }
+        }
+        else if (Catalog is null)
         {
-            problems.Add("'map.url' is required — a feed with no address supplies nothing.");
+            problems.Add(
+                "a manifest must do something: give it a 'catalog' section, a sourcing 'match'/'request'/'map', or both.");
         }
 
         if (Transform is { } transform && string.IsNullOrWhiteSpace(transform.Command))
         {
             problems.Add("'transform.command' is required when a transform is declared.");
+        }
+
+        if (Catalog is { } catalog)
+        {
+            problems.AddRange(catalog.Validate());
         }
 
         return problems;

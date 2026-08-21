@@ -526,6 +526,13 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
     {
         await using var connection = await _connectionFactory.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+        // Search passes are excluded, and that exclusion is load-bearing. A
+        // search covers only what its term matched, but it is a completed run
+        // over the same source, so treating it as the previous pass would move
+        // the incremental watermark to the moment it ran — and the next
+        // incremental import would skip everything the search did not happen to
+        // match. The rows are still written; they are just not evidence of
+        // having covered anything.
         return await connection.QuerySingleOrDefaultAsync<CatalogImportRun>(
             new CommandDefinition(
                 """
@@ -533,10 +540,11 @@ public sealed class CatalogListingRepository : ICatalogListingRepository
                        ItemsSeen, ItemsChanged, ItemsFailed, ListingsAdded, LastError
                 FROM   CatalogImportRun
                 WHERE  SourceKey = @SourceKey
+                AND    Mode <> @SearchMode
                 ORDER  BY StartedAt DESC, RunId DESC
                 LIMIT  1;
                 """,
-                new { SourceKey = sourceKey },
+                new { SourceKey = sourceKey, SearchMode = (int)ImportMode.Search },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 

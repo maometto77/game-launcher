@@ -47,12 +47,19 @@ public sealed class ListingInstallService : IListingInstallService
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<ListingMirror> GetMirrors(CatalogListing listing)
+    public IReadOnlyList<ListingMirror> GetMirrors(CatalogListing listing, string? preferredSourceKey = null)
     {
         ArgumentNullException.ThrowIfNull(listing);
 
-        return ToMirrors(listing.Downloads);
+        return ToMirrors(listing.Downloads, preferredSourceKey);
     }
+
+    /// <summary>Determines whether a mirror list holds anything from one source.</summary>
+    /// <param name="mirrors">The mirrors in hand.</param>
+    /// <param name="sourceKey">The source someone chose.</param>
+    /// <returns><see langword="true"/> when it is represented.</returns>
+    private static bool Offers(IReadOnlyList<ListingMirror> mirrors, string sourceKey) =>
+        mirrors.Any(mirror => string.Equals(mirror.SourceKey, sourceKey, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Explains why a listing cannot be installed.
@@ -73,18 +80,34 @@ public sealed class ListingInstallService : IListingInstallService
     /// Turns download rows into the addresses an install will try, in order.
     /// </summary>
     /// <param name="downloads">The rows to convert.</param>
+    /// <param name="preferredSourceKey">A source to try first, or <see langword="null"/>.</param>
     /// <returns>Mirrors, best first.</returns>
-    private static IReadOnlyList<ListingMirror> ToMirrors(IReadOnlyList<ListingDownload> downloads)
+    private static IReadOnlyList<ListingMirror> ToMirrors(
+        IReadOnlyList<ListingDownload> downloads,
+        string? preferredSourceKey = null)
     {
         return downloads
             .Where(download => download.Kind is DownloadKind.Game or DownloadKind.Torrent)
             .Where(download => Uri.TryCreate(download.Url, UriKind.Absolute, out var parsed) &&
                                parsed.Scheme is "http" or "https" or "magnet")
 
+            // A chosen source first, when someone chose one. Reordered rather
+            // than filtered: they asked for that source to be tried, not for
+            // every other address to be thrown away, and an install that fails
+            // because the one preferred mirror was down would be a worse answer
+            // than one that quietly succeeded elsewhere.
+            .OrderBy(download =>
+                preferredSourceKey is not null &&
+                string.Equals(download.SourceKey, preferredSourceKey, StringComparison.OrdinalIgnoreCase)
+                    ? 0
+                    : 1)
+
             // Torrents last, whatever their recorded rank. They need an external
             // engine that may not be installed, so a direct address is always
             // tried first and the torrent is a bonus rather than a dependency.
-            .OrderBy(download => download.Kind == DownloadKind.Torrent ? 1 : 0)
+            // Applied within the preference, not across it: preferring a source
+            // should not promote its torrent above its own direct address.
+            .ThenBy(download => download.Kind == DownloadKind.Torrent ? 1 : 0)
             .ThenBy(download => download.MirrorRank)
             .Select(download => new ListingMirror(
                 new Uri(download.Url),
@@ -97,6 +120,7 @@ public sealed class ListingInstallService : IListingInstallService
     /// <inheritdoc />
     public async Task<ListingInstallResult> PrepareAsync(
         string listingId,
+        string? preferredSourceKey = null,
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -110,13 +134,25 @@ public sealed class ListingInstallService : IListingInstallService
         // away, and every attempt would return a 403. Another source may still
         // hold the same game, so this falls through to resolution rather than
         // failing outright.
-        var mirrors = listing.IsDownloadable ? GetMirrors(listing) : [];
+        var mirrors = listing.IsDownloadable ? GetMirrors(listing, preferredSourceKey) : [];
 
-        if (mirrors.Count == 0)
+        // A listing whose own rows hold nothing for the chosen source still has
+        // to ask: the addresses that source would supply are worked out at
+        // install time, and stopping here would make choosing a source the one
+        // way to get fewer mirrors rather than the ones you asked for.
+        if (mirrors.Count == 0 || (preferredSourceKey is not null && !Offers(mirrors, preferredSourceKey)))
         {
             var payload = await _sourcing.ResolveAsync(listing, cancellationToken).ConfigureAwait(false);
 
-            if (!payload.HasDownloads)
+            if (payload.HasDownloads)
+            {
+                _logger.LogInformation(
+                    "Resolved {Count} download address(es) for '{Title}' from another source.",
+                    payload.Downloads.Count, listing.Title);
+
+                mirrors = ToMirrors(payload.Downloads, preferredSourceKey);
+            }
+            else if (mirrors.Count == 0)
             {
                 return new ListingInstallResult(
                     null,
@@ -124,12 +160,6 @@ public sealed class ListingInstallService : IListingInstallService
                     0,
                     payload.Explanation ?? DescribeUnavailable(listing));
             }
-
-            _logger.LogInformation(
-                "Resolved {Count} download address(es) for '{Title}' from another source.",
-                payload.Downloads.Count, listing.Title);
-
-            mirrors = ToMirrors(payload.Downloads);
         }
 
         var tried = 0;

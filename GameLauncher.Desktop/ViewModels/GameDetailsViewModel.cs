@@ -11,6 +11,7 @@ using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Launcher;
 using GameLauncher.Desktop.Services.Library;
+using GameLauncher.Desktop.Services.Saves;
 using Microsoft.Extensions.Logging;
 
 namespace GameLauncher.Desktop.ViewModels;
@@ -31,6 +32,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     private readonly IGameLaunchService _launcher;
     private readonly IDialogService _dialogs;
     private readonly INavigationService _navigation;
+    private readonly ISavePathResolver _saves;
     private readonly ILogger<GameDetailsViewModel> _logger;
 
     private int _gameId;
@@ -87,6 +89,26 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     [ObservableProperty]
     private string _artworkSearchTitle = string.Empty;
 
+    /// <summary>Where this game keeps its progress, once that has been looked up.</summary>
+    [ObservableProperty]
+    private ObservableCollection<SaveLocationItemViewModel> _saveLocations = [];
+
+    /// <summary>What the panel says when there are no rows to show.</summary>
+    [ObservableProperty]
+    private string _saveStatusText = string.Empty;
+
+    /// <summary>Whether any location was resolved.</summary>
+    [ObservableProperty]
+    private bool _hasSaveLocations;
+
+    /// <summary>Whether looking the game up would mean fetching the manifest first.</summary>
+    [ObservableProperty]
+    private bool _savesNeedLookup;
+
+    /// <summary>Whether a lookup is running.</summary>
+    [ObservableProperty]
+    private bool _isResolvingSaves;
+
     /// <summary>
     /// Initialises a new instance.
     /// </summary>
@@ -101,6 +123,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
     /// <param name="launcher">Launch and playtime tracking.</param>
     /// <param name="dialogs">Confirmation prompts.</param>
     /// <param name="navigation">Used to leave the page after uninstalling.</param>
+    /// <param name="saves">Works out where this game keeps its progress.</param>
     /// <param name="logger">Logger for page diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public GameDetailsViewModel(
@@ -115,6 +138,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         IGameLaunchService launcher,
         IDialogService dialogs,
         INavigationService navigation,
+        ISavePathResolver saves,
         ILogger<GameDetailsViewModel> logger)
     {
         _games = games ?? throw new ArgumentNullException(nameof(games));
@@ -128,6 +152,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         _launcher = launcher ?? throw new ArgumentNullException(nameof(launcher));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
+        _saves = saves ?? throw new ArgumentNullException(nameof(saves));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _launcher.GameStarted += OnGameStateChanged;
@@ -213,6 +238,7 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
 
             await LoadAchievementsAsync(game.CatalogId, cancellationToken).ConfigureAwait(true);
             await LoadExternalAchievementsAsync(game.SteamAppId, cancellationToken).ConfigureAwait(true);
+            await LoadSaveLocationsAsync(game, fetchManifest: false, cancellationToken).ConfigureAwait(true);
 
             OnPropertyChanged(nameof(CanPlay));
             PlayCommand.NotifyCanExecuteChanged();
@@ -229,6 +255,115 @@ public sealed partial class GameDetailsViewModel : ViewModelBase, INavigationTar
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Works out where this game keeps its progress.
+    /// </summary>
+    /// <param name="game">The game being shown.</param>
+    /// <param name="fetchManifest">
+    /// Whether it is acceptable to download the save manifest to answer.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the lookup.</param>
+    /// <returns>A task that completes when the panel has been filled in.</returns>
+    /// <remarks>
+    /// <para>
+    /// Opening a page never fetches. The manifest is some sixteen megabytes, and
+    /// pulling it down because someone clicked a game would be the launcher
+    /// deciding something that belongs to the person running it — the same rule
+    /// discovery follows. So a page load answers only if the manifest is already
+    /// in hand, and otherwise offers the lookup as a button.
+    /// </para>
+    /// <para>
+    /// Locations that do not exist are asked for deliberately. "Your saves will
+    /// be here, and that folder has not appeared yet" is the answer for a game
+    /// that has not been played, and suppressing it would make an unplayed game
+    /// look like one nothing is known about.
+    /// </para>
+    /// </remarks>
+    private async Task LoadSaveLocationsAsync(Game game, bool fetchManifest, CancellationToken cancellationToken)
+    {
+        SaveLocations = [];
+        HasSaveLocations = false;
+
+        if (!fetchManifest && !_saves.IsLoaded)
+        {
+            SavesNeedLookup = true;
+            SaveStatusText = "Not looked up yet.";
+            return;
+        }
+
+        IsResolvingSaves = true;
+
+        try
+        {
+            var result = await _saves
+                .ResolveAsync(
+                    new SavePathQuery
+                    {
+                        Title = game.Title,
+                        SteamAppId = game.SteamAppId,
+                        InstallDirectory = game.InstallDir,
+                        IncludeMissing = true
+                    },
+                    cancellationToken)
+                .ConfigureAwait(true);
+
+            SavesNeedLookup = false;
+
+            if (!result.Found)
+            {
+                SaveStatusText = "Nothing known about where this game keeps its saves.";
+                return;
+            }
+
+            SaveLocations = new ObservableCollection<SaveLocationItemViewModel>(
+                result.Locations.Select(location => new SaveLocationItemViewModel(location)));
+
+            HasSaveLocations = SaveLocations.Count > 0;
+
+            // The matched title is worth showing. The manifest is matched on a
+            // name, so a wrong match is possible, and it is only recognisable if
+            // the name that matched is on screen.
+            SaveStatusText = HasSaveLocations
+                ? $"Matched '{result.MatchedTitle}'."
+                : $"Matched '{result.MatchedTitle}', but no location resolves on this machine.";
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // The rest of the page is still worth showing. A save panel that
+            // could not answer is a gap, not a failed page load.
+            _logger.LogDebug(ex, "Resolving saves for '{Title}' failed.", game.Title);
+
+            SavesNeedLookup = true;
+            SaveStatusText = "Save locations could not be looked up.";
+        }
+        finally
+        {
+            IsResolvingSaves = false;
+        }
+    }
+
+    /// <summary>
+    /// Looks up this game's save locations, fetching the manifest if need be.
+    /// </summary>
+    /// <returns>A task that completes when the panel has been filled in.</returns>
+    /// <remarks>
+    /// The explicit gesture that page load deliberately does not make. Someone
+    /// pressing this has asked for the manifest, which is the whole difference.
+    /// </remarks>
+    [RelayCommand]
+    private async Task LookUpSavesAsync()
+    {
+        if (Game is { } game)
+        {
+            await LoadSaveLocationsAsync(game, fetchManifest: true, CancellationToken.None)
+                .ConfigureAwait(true);
         }
     }
 

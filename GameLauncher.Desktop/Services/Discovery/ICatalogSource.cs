@@ -36,6 +36,25 @@ public sealed record SourceEnumerationOptions
 
     /// <summary>Stop after this many references. Zero means no limit.</summary>
     public int MaxItems { get; init; }
+
+    /// <summary>
+    /// Only items matching this text, where the source can express it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Empty means the whole collection, which is what an import pass wants. A
+    /// value narrows the pass to one search, which is what fills the catalogue in
+    /// on demand rather than by importing several thousand records first.
+    /// </para>
+    /// <para>
+    /// A source that cannot search ignores this and returns its usual
+    /// enumeration, exactly as it may ignore <see cref="ChangedSince"/>. That is
+    /// the reason this is a field on the existing options rather than a second
+    /// interface: a source opts in by honouring it, and one that cannot is not
+    /// obliged to grow a method it would have to implement dishonestly.
+    /// </para>
+    /// </remarks>
+    public string? Query { get; init; }
 }
 
 /// <summary>

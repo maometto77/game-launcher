@@ -110,3 +110,7 @@ GameLauncher.Desktop/tools/win-x64/*
 
 # Faults recorded by the test host when a background thread dies.
 **/test-process-faults.log
+
+# Python bytecode from the adapter example tests
+__pycache__/
+*.py[cod]

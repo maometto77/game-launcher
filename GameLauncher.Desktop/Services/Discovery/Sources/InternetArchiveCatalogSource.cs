@@ -148,7 +148,7 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        var query = BuildQuery(options.ChangedSince);
+        var query = BuildQuery(options.ChangedSince, options.Query);
 
         if (query is null)
         {
@@ -520,13 +520,14 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
     /// Builds the fielded search query.
     /// </summary>
     /// <param name="changedSince">Only items changed since this point, or <see langword="null"/>.</param>
+    /// <param name="search">Free text to match against the title, or <see langword="null"/>.</param>
     /// <returns>The query, or <see langword="null"/> when nothing is configured.</returns>
     /// <remarks>
     /// The scrape API rejects a bare free-text query outright, so every term here
     /// is fielded. The media type is pinned as well as the collection because a
     /// software collection still contains the odd text or image item.
     /// </remarks>
-    private string? BuildQuery(DateTimeOffset? changedSince)
+    private string? BuildQuery(DateTimeOffset? changedSince, string? search = null)
     {
         var terms = Collections
             .Where(collection => !string.IsNullOrWhiteSpace(collection))
@@ -561,7 +562,67 @@ public sealed class InternetArchiveCatalogSource : ICatalogSource
             builder.Append(CultureInfo.InvariantCulture, $" AND addeddate:[{from} TO 9999-12-31]");
         }
 
+        if (Escape(search) is { Length: > 0 } term)
+        {
+            // Narrowed to the configured collections rather than searching the
+            // whole Archive. The settings say which corner of it this catalogue
+            // is for, and a search that ignored them would import items from
+            // collections the user deliberately did not ask for.
+            builder.Append(CultureInfo.InvariantCulture, $" AND title:({term})");
+        }
+
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// Reduces free text to something safe to place inside a fielded query.
+    /// </summary>
+    /// <param name="text">What the person typed.</param>
+    /// <returns>The safe remainder, possibly empty.</returns>
+    /// <remarks>
+    /// <para>
+    /// An allow-list, not an escape. The query is assembled as text and the
+    /// index speaks a Lucene-like syntax, so a quotation mark or bracket in the
+    /// search box does not merely fail to match — it closes the term this is
+    /// substituted into and starts another. <c>") OR collection:("</c> typed
+    /// into a search box would otherwise widen a query that the settings
+    /// deliberately narrowed.
+    /// </para>
+    /// <para>
+    /// Letters, digits, spaces and the few punctuation marks that occur in real
+    /// titles survive; everything else is dropped rather than escaped, because
+    /// the escaping rules differ between the endpoints this project talks to and
+    /// a search term loses nothing worth keeping by being conservative.
+    /// </para>
+    /// </remarks>
+    private static string Escape(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var safe = new StringBuilder(text.Length);
+
+        foreach (var character in text.Trim())
+        {
+            if (char.IsLetterOrDigit(character) || character is '-' or '_' or '\'' or '.' or '&')
+            {
+                safe.Append(character);
+                continue;
+            }
+
+            // Anything else becomes a gap rather than vanishing, so two words do
+            // not run together into a term matching neither. Runs are collapsed,
+            // because a stripped "):(" would otherwise leave three spaces where
+            // the reader expects one.
+            if (safe.Length > 0 && safe[^1] != ' ')
+            {
+                safe.Append(' ');
+            }
+        }
+
+        return safe.ToString().Trim();
     }
 
     /// <summary>

@@ -89,7 +89,7 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
     }
 
     /// <inheritdoc />
-    public DownloadJob Enqueue(string listingId, string title)
+    public DownloadJob Enqueue(string listingId, string title, string? preferredSourceKey = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(listingId);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
@@ -114,6 +114,7 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
                 JobId = $"job_{++_sequence}",
                 ListingId = listingId,
                 Title = title,
+                PreferredSourceKey = preferredSourceKey,
                 Priority = _nextPriority += PriorityStep
             };
 
@@ -466,7 +467,7 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
             var progress = new Progress<InstallProgress>(update => Apply(job, update));
 
             var result = await _install
-                .PrepareAsync(job.ListingId, progress, cancellationToken)
+                .PrepareAsync(job.ListingId, job.PreferredSourceKey, progress, cancellationToken)
                 .ConfigureAwait(false);
 
             job.MirrorsTried = result.MirrorsTried;

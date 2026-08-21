@@ -181,7 +181,7 @@ public static class FeedDownloadMapper
     /// inferred from the digest's length when the transfer is checked.
     /// </para>
     /// </remarks>
-    private static string? Digest(string? value)
+    internal static string? Digest(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

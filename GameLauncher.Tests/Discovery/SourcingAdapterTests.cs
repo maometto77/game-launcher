@@ -210,6 +210,222 @@ public sealed class SourcingAdapterTests
     }
 
     [Fact]
+    public async Task Every_adapters_addresses_are_merged_into_one_mirror_list()
+    {
+        // Not the first that answers. A download that dies halfway is ordinary
+        // for these hosts, and the transfer only survives it if the alternate is
+        // already on the row.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://archive.org/details/msdos_Doom_1993");
+
+        var preferred = new StubAdapter(
+            "user-feed",
+            claims: true,
+            new SourcingPayload([Download("https://feed.test/doom.zip")]),
+            priority: 100);
+
+        var builtIn = new StubAdapter(
+            "built-in", claims: true, new SourcingPayload([Download("https://archive.test/doom.zip")]));
+
+        var payload = await ResolverOver(host, preferred, builtIn).ResolveAsync(listing);
+
+        Assert.True(builtIn.WasAsked);
+        Assert.Equal(2, payload.Downloads.Count);
+
+        Assert.Equal("https://feed.test/doom.zip", payload.Downloads[0].Url);
+        Assert.Equal("https://archive.test/doom.zip", payload.Downloads[1].Url);
+    }
+
+    [Fact]
+    public async Task Priority_decides_the_order_addresses_are_tried_in()
+    {
+        // Registration order deliberately disagrees with priority here, so a
+        // result matching priority cannot be the registration order by accident.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://archive.org/details/msdos_Doom_1993");
+
+        var lastResort = new StubAdapter(
+            "slow-mirror",
+            claims: true,
+            new SourcingPayload([Download("https://slow.test/doom.zip")]),
+            priority: -10);
+
+        var builtIn = new StubAdapter(
+            "built-in", claims: true, new SourcingPayload([Download("https://archive.test/doom.zip")]));
+
+        var preferred = new StubAdapter(
+            "user-feed",
+            claims: true,
+            new SourcingPayload([Download("https://feed.test/doom.zip")]),
+            priority: 100);
+
+        var payload = await ResolverOver(host, lastResort, builtIn, preferred).ResolveAsync(listing);
+
+        Assert.Equal(
+            ["https://feed.test/doom.zip", "https://archive.test/doom.zip", "https://slow.test/doom.zip"],
+            payload.Downloads.Select(download => download.Url));
+
+        // Renumbered across the merged list. Each adapter numbers its own rows
+        // from zero, so leaving those alone would give every row rank 0.
+        Assert.Equal([0, 1, 2], payload.Downloads.Select(download => download.MirrorRank));
+    }
+
+    [Fact]
+    public async Task An_address_two_adapters_both_offer_is_only_tried_once()
+    {
+        // Two adapters describing one host routinely produce the same address.
+        // Keeping both would have aria2c retry a URL that just failed and count
+        // it as a fallback.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://archive.org/details/msdos_Doom_1993");
+
+        var feed = new StubAdapter(
+            "user-feed",
+            claims: true,
+            new SourcingPayload([Download("https://archive.test/doom.zip")]),
+            priority: 100);
+
+        var builtIn = new StubAdapter(
+            "built-in",
+            claims: true,
+            new SourcingPayload([Download("https://archive.test/doom.zip"), Download("https://other.test/doom.zip")]));
+
+        var payload = await ResolverOver(host, feed, builtIn).ResolveAsync(listing);
+
+        Assert.Equal(
+            ["https://archive.test/doom.zip", "https://other.test/doom.zip"],
+            payload.Downloads.Select(download => download.Url));
+    }
+
+    [Fact]
+    public async Task A_failing_adapter_does_not_take_the_other_mirrors_with_it()
+    {
+        // Task.WhenAll surfaces one exception and abandons the rest of the
+        // results, so an unreachable host must never be allowed to throw out of
+        // the concurrent gather.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://archive.org/details/msdos_Doom_1993");
+
+        var builtIn = new StubAdapter(
+            "built-in", claims: true, new SourcingPayload([Download("https://archive.test/doom.zip")]));
+
+        var payload = await ResolverOver(host, new ThrowingAdapter(), builtIn).ResolveAsync(listing);
+
+        Assert.Equal("https://archive.test/doom.zip", Assert.Single(payload.Downloads).Url);
+    }
+
+    [Fact]
+    public async Task An_adapter_that_declines_does_not_stop_a_later_one_answering()
+    {
+        // The scriptable adapter answers CanHandle before it has read the
+        // adapter folder, so it deliberately guesses yes. Registered first, a
+        // wrong guess would otherwise take the address away from the built-in
+        // that can actually supply it — an install that silently stopped
+        // working after a restart.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://archive.org/details/msdos_Doom_1993");
+
+        var guessed = new StubAdapter("user-feed", claims: true, SourcingPayload.Unsupported);
+
+        var builtIn = new StubAdapter(
+            "built-in", claims: true, new SourcingPayload([Download("https://archive.test/doom.zip")]));
+
+        var payload = await ResolverOver(host, guessed, builtIn).ResolveAsync(listing);
+
+        Assert.True(guessed.WasAsked);
+        Assert.True(payload.HasDownloads);
+        Assert.Equal("https://archive.test/doom.zip", payload.Downloads[0].Url);
+    }
+
+    [Fact]
+    public async Task A_real_refusal_survives_a_later_adapter_merely_declining()
+    {
+        // "Their rules forbid this path" is worth telling someone. "I do not
+        // handle this address" is not, and letting the second overwrite the
+        // first would replace the only useful explanation with nothing.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+        await SeedSourceAsync(host, listing, "https://blocked.test/game/doom");
+
+        var refused = new StubAdapter(
+            "blocked",
+            claims: true,
+            new SourcingPayload([], SourcingRefusal.DisallowedByRobots, "blocked.test disallows that path."));
+
+        var silent = new StubAdapter("other", claims: true, SourcingPayload.Unsupported);
+
+        var payload = await ResolverOver(host, refused, silent).ResolveAsync(listing);
+
+        Assert.False(payload.HasDownloads);
+        Assert.Equal(SourcingRefusal.DisallowedByRobots, payload.Refusal);
+        Assert.Contains("disallows", payload.Explanation ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_chosen_source_is_tried_first_without_losing_the_others()
+    {
+        // Reordered, not filtered. Choosing a source says which to try first,
+        // not that the install should fail when that one is unreachable.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+
+        listing.Downloads =
+        [
+            Download("https://archive.test/doom.zip", "internet-archive", rank: 0),
+            Download("https://feed.test/doom.zip", "my-feed", rank: 1)
+        ];
+
+        await host.Resolve<ICatalogListingRepository>().UpsertManyAsync([listing]);
+
+        var install = host.Resolve<IListingInstallService>();
+
+        var mirrors = install.GetMirrors(listing, "my-feed");
+
+        Assert.Equal(
+            ["https://feed.test/doom.zip", "https://archive.test/doom.zip"],
+            mirrors.Select(mirror => mirror.Url.AbsoluteUri));
+
+        // Untouched without a preference: the catalogue's own ranking stands.
+        Assert.Equal(
+            "https://archive.test/doom.zip",
+            install.GetMirrors(listing)[0].Url.AbsoluteUri);
+    }
+
+    [Fact]
+    public async Task Preferring_a_source_does_not_promote_its_torrent_over_a_direct_address()
+    {
+        // A torrent needs aria2c, which may not be installed. Choosing a source
+        // should not quietly make an install depend on it.
+        using var host = new TestAppHost();
+
+        var listing = Listing("Doom", 1993);
+
+        var torrent = Download("https://feed.test/doom.torrent", "my-feed", rank: 0);
+        torrent.Kind = DownloadKind.Torrent;
+
+        listing.Downloads = [torrent, Download("https://feed.test/doom.zip", "my-feed", rank: 1)];
+
+        await host.Resolve<ICatalogListingRepository>().UpsertManyAsync([listing]);
+
+        var mirrors = host.Resolve<IListingInstallService>().GetMirrors(listing, "my-feed");
+
+        Assert.Equal("https://feed.test/doom.zip", mirrors[0].Url.AbsoluteUri);
+        Assert.Equal(DownloadKind.Torrent, torrent.Kind);
+    }
+
+    [Fact]
     public async Task A_restricted_listings_own_addresses_are_never_used()
     {
         // The source said the item may be looked at but not taken away, so its
@@ -280,12 +496,16 @@ public sealed class SourcingAdapterTests
         IsDownloadable = true
     };
 
-    private static ListingDownload Download(string url) => new()
+    private static ListingDownload Download(
+        string url,
+        string sourceKey = "internet-archive",
+        int rank = 0) => new()
     {
         ListingId = "lst_archive",
-        SourceKey = "internet-archive",
+        SourceKey = sourceKey,
         Url = url,
-        FileName = "doom.zip"
+        FileName = "doom.zip",
+        MirrorRank = rank
     };
 
     private static byte[] Archive()
@@ -301,6 +521,106 @@ public sealed class SourcingAdapterTests
         }
 
         return buffer.ToArray();
+    }
+
+    /// <summary>
+    /// Seeds the source observation the resolver reads before asking adapters.
+    /// </summary>
+    /// <param name="host">The container under test.</param>
+    /// <param name="listing">The listing the observation belongs to.</param>
+    /// <param name="url">The page address the adapters will be offered.</param>
+    /// <returns>A task that completes once the row exists.</returns>
+    /// <remarks>
+    /// The resolver dispatches on the source's own recorded address rather than
+    /// on anything the merged row carries, so a test about dispatch has to write
+    /// a real observation.
+    /// </remarks>
+    private static async Task SeedSourceAsync(TestAppHost host, CatalogListing listing, string url)
+    {
+        var observation = new SourceListing
+        {
+            SourceKey = "test",
+            SourceItemId = "item",
+            SourceUrl = new Uri(url),
+            Title = listing.Title,
+            Year = listing.Year,
+            RawPayload = "{}"
+        };
+
+        var repository = host.Resolve<ICatalogListingRepository>();
+
+        await repository.UpsertManyAsync([listing]);
+        await repository.UpsertSourceAsync(new ListingSourceRecord
+        {
+            ListingId = listing.ListingId,
+            SourceKey = observation.SourceKey,
+            SourceItemId = observation.SourceItemId,
+            SourceUrl = url,
+            NormalizedJson = System.Text.Json.JsonSerializer.Serialize(
+                observation,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)),
+            FetchedAt = DateTimeOffset.Now,
+            SourceContentHash = "hash"
+        });
+    }
+
+    /// <summary>Builds a resolver over an explicit list of adapters, in order.</summary>
+    /// <param name="host">The container under test.</param>
+    /// <param name="adapters">The adapters, highest precedence first.</param>
+    /// <returns>The resolver.</returns>
+    private static DownloadSourceResolver ResolverOver(TestAppHost host, params ISourcingAdapter[] adapters) =>
+        new(
+            adapters,
+            host.Resolve<ICatalogListingRepository>(),
+            host.Resolve<IListingNormalizer>(),
+            NullLogger<DownloadSourceResolver>.Instance);
+
+    /// <summary>An adapter with a fixed answer, for testing dispatch and ranking.</summary>
+    /// <param name="key">Its dispatch key.</param>
+    /// <param name="claims">Whether it claims every address.</param>
+    /// <param name="answer">What it returns when asked.</param>
+    /// <param name="priority">Where its addresses rank; zero is the built-in baseline.</param>
+    private sealed class StubAdapter(
+        string key,
+        bool claims,
+        SourcingPayload answer,
+        int priority = 0) : ISourcingAdapter
+    {
+        /// <summary>Gets a value indicating whether this adapter was actually asked.</summary>
+        public bool WasAsked { get; private set; }
+
+        public string Key => key;
+
+        public string DisplayName => key;
+
+        public int Priority => priority;
+
+        public bool CanHandle(string url) => claims;
+
+        public Task<SourcingPayload> ExtractDownloadPayloadAsync(
+            CatalogListing listing,
+            string url,
+            CancellationToken cancellationToken = default)
+        {
+            WasAsked = true;
+            return Task.FromResult(answer);
+        }
+    }
+
+    /// <summary>An adapter that fails, to prove one failing does not stop the rest.</summary>
+    private sealed class ThrowingAdapter : ISourcingAdapter
+    {
+        public string Key => "throwing";
+
+        public string DisplayName => "Throwing adapter";
+
+        public bool CanHandle(string url) => true;
+
+        public Task<SourcingPayload> ExtractDownloadPayloadAsync(
+            CatalogListing listing,
+            string url,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("this adapter is broken");
     }
 
     /// <summary>A robots policy with a fixed answer, so tests never reach the network.</summary>

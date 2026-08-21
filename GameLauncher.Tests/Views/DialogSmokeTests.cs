@@ -8,6 +8,7 @@ using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Friends;
 using GameLauncher.Desktop.Services.Notifications;
+using GameLauncher.Desktop.Services.Saves;
 using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Desktop.ViewModels;
 using GameLauncher.Desktop.Views;
@@ -241,6 +242,16 @@ public sealed class DialogSmokeTests
             DiscoverListing("lst_3", "Untitled", null, downloadable: true, developer: null)
         ]);
 
+        // Both badge kinds, because they are drawn by different branches of one
+        // template and an unseeded card draws neither.
+        var repository = host.Resolve<GameLauncher.Desktop.Services.Database.ICatalogListingRepository>();
+
+        await AddListingSourceAsync(
+            repository, "lst_1", GameLauncher.Desktop.Services.Discovery.Sources.InternetArchiveCatalogSource.SourceKey);
+
+        await AddListingSourceAsync(
+            repository, "lst_2", GameLauncher.Desktop.Services.Discovery.Sources.MyAbandonwareCatalogSource.SourceKey);
+
         var viewModel = host.Resolve<DiscoverViewModel>();
 
         // Set before navigating so the first query already includes the
@@ -253,6 +264,57 @@ public sealed class DialogSmokeTests
         Assert.Equal(3, viewModel.ListingsView.Count);
         Assert.False(viewModel.IsCatalogEmpty);
         Assert.Contains(viewModel.ListingsView, item => !item.IsDownloadable);
+
+        // The badge template has a trigger for the metadata-only kind, so both
+        // sides of it have to be on screen for this to prove anything.
+        var badges = viewModel.ListingsView.SelectMany(item => item.SourceBadges).ToArray();
+
+        Assert.Contains(badges, badge => !badge.IsMetadataOnly);
+        Assert.Contains(badges, badge => badge.IsMetadataOnly);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task GameDetailsPage_realises_its_save_locations()
+    {
+        using var host = new TestAppHost();
+        host.SeedSampleData();
+
+        var games = await host.Resolve<IGameRepository>().GetAllAsync();
+
+        var viewModel = host.Resolve<GameDetailsViewModel>();
+        await viewModel.InitializeAsync(games[0].Id);
+        await viewModel.OnNavigatedToAsync();
+
+        // A page load never fetches the save manifest, so the panel offers the
+        // lookup instead of listing anything. That is its own branch of markup.
+        Assert.True(viewModel.SavesNeedLookup);
+        Assert.False(viewModel.HasSaveLocations);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+
+        // The rows a successful lookup would produce. Set directly because the
+        // resolver would otherwise have to download a sixteen-megabyte manifest
+        // to tell a test what it already knows, and an ItemsControl with no
+        // items never expands its template — which is the whole point here.
+        viewModel.SaveLocations =
+        [
+            new SaveLocationItemViewModel(new SaveLocation(
+                @"C:\Users\test\Saved Games\Doom", SaveLocationKind.Directory, ["save"], true)),
+            new SaveLocationItemViewModel(new SaveLocation(
+                @"C:\Users\test\AppData\Roaming\Doom\config.ini", SaveLocationKind.File, ["config"], false)),
+            new SaveLocationItemViewModel(new SaveLocation(
+                @"HKEY_CURRENT_USER\Software\Doom", SaveLocationKind.Registry, [], false))
+        ];
+
+        viewModel.HasSaveLocations = true;
+        viewModel.SavesNeedLookup = false;
+        viewModel.SaveStatusText = "Matched 'Doom'.";
+
+        // Present and absent are two branches of the row template's trigger.
+        Assert.Contains(viewModel.SaveLocations, location => location.Exists);
+        Assert.Contains(viewModel.SaveLocations, location => !location.Exists);
 
         _wpf.Invoke(() => RealisePage(viewModel));
     }
@@ -335,6 +397,28 @@ public sealed class DialogSmokeTests
 
         _wpf.Invoke(() => RealisePage(viewModel));
     }
+
+    /// <summary>
+    /// Records that a source described a listing, so its card draws a badge.
+    /// </summary>
+    /// <param name="repository">Catalogue persistence.</param>
+    /// <param name="listingId">The listing described.</param>
+    /// <param name="sourceKey">The source that described it.</param>
+    /// <returns>A task that completes once the row exists.</returns>
+    private static Task AddListingSourceAsync(
+        GameLauncher.Desktop.Services.Database.ICatalogListingRepository repository,
+        string listingId,
+        string sourceKey) =>
+        repository.UpsertSourceAsync(new ListingSourceRecord
+        {
+            ListingId = listingId,
+            SourceKey = sourceKey,
+            SourceItemId = $"{sourceKey}-item",
+            SourceUrl = $"https://{sourceKey}.test/item",
+            NormalizedJson = "{}",
+            FetchedAt = DateTimeOffset.Now,
+            SourceContentHash = sourceKey
+        });
 
     private static GameLauncher.Desktop.Models.CatalogListing DiscoverListing(
         string id,

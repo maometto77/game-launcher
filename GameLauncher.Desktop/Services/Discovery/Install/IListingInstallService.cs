@@ -54,21 +54,34 @@ public interface IListingInstallService
     /// Lists the addresses a listing's game can be fetched from, best first.
     /// </summary>
     /// <param name="listing">The listing to install.</param>
+    /// <param name="preferredSourceKey">
+    /// A source to try first, or <see langword="null"/> for the recorded order.
+    /// </param>
     /// <returns>Mirrors in the order they should be tried.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="listing"/> is <see langword="null"/>.</exception>
-    IReadOnlyList<ListingMirror> GetMirrors(CatalogListing listing);
+    IReadOnlyList<ListingMirror> GetMirrors(CatalogListing listing, string? preferredSourceKey = null);
 
     /// <summary>
     /// Downloads, verifies and unpacks a listing, trying each mirror in turn.
     /// </summary>
     /// <param name="listingId">The listing to install.</param>
+    /// <param name="preferredSourceKey">
+    /// A source whose addresses should be tried first, or <see langword="null"/>
+    /// to take them in the order the catalogue recorded.
+    /// </param>
     /// <param name="progress">Optional receiver for progress updates.</param>
     /// <param name="cancellationToken">Cancels the install.</param>
     /// <returns>What was prepared, ready for the user to confirm.</returns>
     /// <exception cref="ArgumentException"><paramref name="listingId"/> is null or blank.</exception>
     /// <exception cref="InvalidOperationException">The listing is unknown.</exception>
+    /// <remarks>
+    /// A preference reorders rather than restricts. Someone picking a source is
+    /// saying which to try first, not that the install should fail if that one
+    /// is unreachable — the others stay behind it as fallbacks.
+    /// </remarks>
     Task<ListingInstallResult> PrepareAsync(
         string listingId,
+        string? preferredSourceKey = null,
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default);
 

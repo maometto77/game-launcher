@@ -6,6 +6,36 @@ using GameLauncher.Desktop.Services.Discovery.Sources;
 namespace GameLauncher.Desktop.ViewModels;
 
 /// <summary>
+/// One source that describes a listing, as it appears on a card.
+/// </summary>
+/// <param name="Label">Short name shown on the badge.</param>
+/// <param name="IsMetadataOnly">
+/// Whether the source describes the game without being able to supply it.
+/// </param>
+/// <param name="SourceKey">The dispatch key, for installing from this source.</param>
+/// <param name="ListingId">The listing this badge belongs to.</param>
+/// <remarks>
+/// <para>
+/// The metadata-only distinction is carried as data rather than inferred from
+/// the label, because it is the one thing the badge has to get right. A source
+/// that can be installed from and a source that merely knows about a game are
+/// different answers to "where can I get this", and drawing them identically
+/// invites exactly the wrong conclusion.
+/// </para>
+/// <para>
+/// The listing id rides along so a badge is a complete instruction on its own.
+/// A pressed badge is the command's whole argument, which keeps the binding a
+/// plain <c>CommandParameter</c> rather than something that has to reach back up
+/// the visual tree for the other half of what it means.
+/// </para>
+/// </remarks>
+public sealed record SourceBadge(string Label, bool IsMetadataOnly, string SourceKey, string ListingId)
+{
+    /// <summary>Gets a value indicating whether installing from this source is offered.</summary>
+    public bool CanInstallFrom => !IsMetadataOnly;
+}
+
+/// <summary>
 /// One catalogue listing as a card.
 /// </summary>
 /// <remarks>
@@ -33,7 +63,9 @@ public sealed partial class ListingItemViewModel : ObservableObject
         // else waits for LoadCoverAsync.
         _coverPath = listing.CoverImagePath;
 
-        SourceBadges = listing.SourceKeys.Select(Describe).ToArray();
+        SourceBadges = listing.SourceKeys
+            .Select(sourceKey => Describe(sourceKey, listing.ListingId))
+            .ToArray();
     }
 
     /// <summary>Gets the listing behind this card.</summary>
@@ -57,11 +89,21 @@ public sealed partial class ListingItemViewModel : ObservableObject
     /// <summary>Gets a value indicating whether the listing can be installed.</summary>
     public bool IsDownloadable => Listing.IsDownloadable;
 
-    /// <summary>Gets the sources that describe this game, as short labels.</summary>
-    public IReadOnlyList<string> SourceBadges { get; }
+    /// <summary>Gets the sources that describe this game.</summary>
+    public IReadOnlyList<SourceBadge> SourceBadges { get; }
 
     /// <summary>Gets a value indicating whether any source badge should be drawn.</summary>
     public bool HasSourceBadges => SourceBadges.Count > 0;
+
+    /// <summary>
+    /// Gets every source named in one line, for the badge strip's tooltip.
+    /// </summary>
+    /// <remarks>
+    /// The strip is a fixed height so that a grid of cards lines up, which means
+    /// a listing described by an unusual number of sources can have one fall
+    /// outside it. The tooltip is where that one is still readable.
+    /// </remarks>
+    public string SourceSummary => string.Join(", ", SourceBadges.Select(badge => badge.Label));
 
     /// <summary>Gets the local path of the cover, or <see langword="null"/> until it is fetched.</summary>
     [ObservableProperty]
@@ -150,16 +192,23 @@ public sealed partial class ListingItemViewModel : ObservableObject
     /// Turns a source key into something worth showing on a card.
     /// </summary>
     /// <param name="sourceKey">The dispatch key.</param>
-    /// <returns>A short label.</returns>
+    /// <param name="listingId">The listing the badge belongs to.</param>
+    /// <returns>The badge.</returns>
     /// <remarks>
     /// MyAbandonware is labelled as metadata because that is the whole truth
     /// about it: its own rules disallow automated downloads, so a badge implying
     /// the game can be fetched from there would be misleading.
     /// </remarks>
-    private static string Describe(string sourceKey) => sourceKey switch
+    private static SourceBadge Describe(string sourceKey, string listingId) => sourceKey switch
     {
-        InternetArchiveCatalogSource.SourceKey => "Archive.org",
-        MyAbandonwareCatalogSource.SourceKey => "MyAbandonware metadata",
-        _ => sourceKey
+        InternetArchiveCatalogSource.SourceKey =>
+            new SourceBadge("Archive.org", false, sourceKey, listingId),
+
+        MyAbandonwareCatalogSource.SourceKey =>
+            new SourceBadge("MyAbandonware metadata", true, sourceKey, listingId),
+
+        // A custom feed, named by whatever its manifest called itself. It exists
+        // to supply downloads, so it is not marked as metadata-only.
+        _ => new SourceBadge(sourceKey, false, sourceKey, listingId)
     };
 }

@@ -370,6 +370,95 @@ public sealed class InternetArchiveSourceTests
     }
 
     [Fact]
+    public async Task A_search_term_narrows_the_query_without_widening_it()
+    {
+        var settings = new FixedSettings();
+
+        await settings.SaveAsync(settings.Current with
+        {
+            DiscoveryEnabled = true,
+            InternetArchiveCollections = ["softwarelibrary_msdos_games"]
+        });
+
+        var stub = new PagingStub(["""{"items":[],"cursor":"","total":0}"""]);
+
+        var source = new InternetArchiveCatalogSource(
+            stub, settings, NullLogger<InternetArchiveCatalogSource>.Instance);
+
+        await foreach (var _ in source.EnumerateAsync(new SourceEnumerationOptions { Query = "prince of persia" }))
+        {
+            // Draining the enumeration is what issues the request.
+        }
+
+        var request = Uri.UnescapeDataString(stub.Requests[0]);
+
+        Assert.Contains("title:(prince of persia)", request);
+
+        // Still inside the configured collection. The settings say which corner
+        // of the Archive this catalogue is for, and a search that dropped them
+        // would import from collections nobody asked for.
+        Assert.Contains("collection:\"softwarelibrary_msdos_games\"", request);
+        Assert.Contains("mediatype:software", request);
+    }
+
+    [Fact]
+    public async Task A_search_term_cannot_restructure_the_query_around_it()
+    {
+        // The query is assembled as text against an index with a Lucene-like
+        // syntax, so a quotation mark in the search box does not merely fail to
+        // match — it closes the term and starts another.
+        var settings = new FixedSettings();
+
+        await settings.SaveAsync(settings.Current with
+        {
+            DiscoveryEnabled = true,
+            InternetArchiveCollections = ["softwarelibrary_msdos_games"]
+        });
+
+        var stub = new PagingStub(["""{"items":[],"cursor":"","total":0}"""]);
+
+        var source = new InternetArchiveCatalogSource(
+            stub, settings, NullLogger<InternetArchiveCatalogSource>.Instance);
+
+        var options = new SourceEnumerationOptions { Query = "doom\") OR collection:(\"anything" };
+
+        await foreach (var _ in source.EnumerateAsync(options))
+        {
+            // Draining the enumeration is what issues the request.
+        }
+
+        var request = Uri.UnescapeDataString(stub.Requests[0]);
+
+        // Exactly one collection term, and it is the configured one.
+        Assert.Equal(1, CountOccurrences(request, "collection:"));
+        Assert.Contains("collection:\"softwarelibrary_msdos_games\"", request);
+        Assert.DoesNotContain("collection:(", request);
+
+        // The punctuation is gone rather than escaped, and the words survive. The
+        // surviving 'OR' is contained inside title:(...) where it can only widen
+        // which titles match, never which collections are searched.
+        Assert.Contains("title:(doom OR collection anything)", request);
+    }
+
+    /// <summary>Counts non-overlapping occurrences of a needle.</summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="needle">What to count.</param>
+    /// <returns>How many times it occurs.</returns>
+    private static int CountOccurrences(string text, string needle)
+    {
+        var count = 0;
+
+        for (var index = text.IndexOf(needle, StringComparison.Ordinal);
+             index >= 0;
+             index = text.IndexOf(needle, index + needle.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    [Fact]
     public async Task An_uploader_alone_is_enough_to_make_the_source_available()
     {
         var settings = new FixedSettings();
