@@ -291,6 +291,16 @@ public sealed partial class DiscoverViewModel : ViewModelBase
                 ? $"Added {result.ListingsAdded} and updated {result.ItemsChanged - result.ListingsAdded}."
                 : "The catalogue is already up to date.";
 
+            // A source that read items and stored none is the shape of a site
+            // that changed underneath its selectors. Reported as a warning
+            // rather than folded into the count, because "added 0" and "read
+            // 300 and understood none of them" want different fixes and look
+            // identical from the summary line alone.
+            if (Describe(result) is { } trouble)
+            {
+                SetErrorMessage(trouble);
+            }
+
             await LoadFacetsAsync(CancellationToken.None).ConfigureAwait(true);
             await QueryAsync(reset: true, CancellationToken.None).ConfigureAwait(true);
         }
@@ -392,6 +402,39 @@ public sealed partial class DiscoverViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Names a source that ran and produced nothing usable.
+    /// </summary>
+    /// <param name="result">What the pass produced.</param>
+    /// <returns>A sentence worth showing, or <see langword="null"/>.</returns>
+    /// <remarks>
+    /// Only for a source that actually read something. One that was skipped, or
+    /// found an empty site, has nothing wrong with it — and warning about those
+    /// would train people to ignore the warning.
+    /// </remarks>
+    private static string? Describe(ImportRunResult result)
+    {
+        var barren = result.Sources
+            .Where(source => source is { ItemsSeen: > 0, ItemsChanged: 0, ListingsAdded: 0 })
+            .Select(source => source.DisplayName)
+            .ToArray();
+
+        var failed = result.Sources
+            .Where(source => !string.IsNullOrWhiteSpace(source.Error))
+            .Select(source => $"{source.DisplayName} ({source.Error})")
+            .ToArray();
+
+        if (failed.Length > 0)
+        {
+            return $"Some sources could not be read: {string.Join("; ", failed)}.";
+        }
+
+        return barren.Length > 0
+            ? $"{string.Join(", ", barren)} returned items the launcher could not read. " +
+              "If this is a crawled site, its layout may have changed — check the selectors in its manifest."
+            : null;
     }
 
     /// <summary>Loads the facet values available for filtering.</summary>

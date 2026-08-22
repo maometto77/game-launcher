@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GameLauncher.Desktop.Models;
+using GameLauncher.Desktop.Services.Database;
+using GameLauncher.Desktop.Services.Discovery.Import;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Shared.Contracts;
@@ -22,6 +24,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly ISettingsService _settings;
     private readonly IDialogService _dialogs;
+    private readonly ICatalogImportService _import;
+    private readonly ICatalogListingRepository _listings;
     private readonly ILogger<SettingsViewModel> _logger;
 
     [ObservableProperty]
@@ -139,23 +143,36 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// </summary>
     /// <param name="settings">Settings persistence.</param>
     /// <param name="dialogs">Folder picker and prompts.</param>
+    /// <param name="import">Supplies the registered catalogue sources.</param>
+    /// <param name="listings">Supplies each source's last import pass.</param>
     /// <param name="logger">Logger for page diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public SettingsViewModel(
         ISettingsService settings,
         IDialogService dialogs,
+        ICatalogImportService import,
+        ICatalogListingRepository listings,
         ILogger<SettingsViewModel> logger)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _import = import ?? throw new ArgumentNullException(nameof(import));
+        _listings = listings ?? throw new ArgumentNullException(nameof(listings));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
+
+    /// <summary>Gets the catalogue sources and what each last did.</summary>
+    /// <remarks>
+    /// Answers "why is Discover empty" without opening the log, which is where
+    /// that answer otherwise lives.
+    /// </remarks>
+    public ObservableCollection<CatalogSourceStatusViewModel> CatalogSources { get; } = [];
 
     /// <summary>Gets the themes offered by the picker.</summary>
     public IReadOnlyList<AppTheme> Themes { get; } = Enum.GetValues<AppTheme>();
 
     /// <inheritdoc />
-    public override Task OnNavigatedToAsync(CancellationToken cancellationToken = default)
+    public override async Task OnNavigatedToAsync(CancellationToken cancellationToken = default)
     {
         var current = _settings.Current;
 
@@ -186,7 +203,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
         StatusText = null;
         ClearError();
 
-        return Task.CompletedTask;
+        await LoadSourceStatusAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Reads what each catalogue source is and what it last did.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the queries.</param>
+    /// <returns>A task that completes when the list is built.</returns>
+    /// <remarks>
+    /// A failure here loses a diagnostic panel, not the settings page. Someone
+    /// who opened Settings to change their theme should not be stopped by a
+    /// database query about something else.
+    /// </remarks>
+    private async Task LoadSourceStatusAsync(CancellationToken cancellationToken)
+    {
+        CatalogSources.Clear();
+
+        try
+        {
+            foreach (var source in _import.Sources)
+            {
+                var lastRun = await _listings
+                    .GetLastRunAsync(source.Key, cancellationToken)
+                    .ConfigureAwait(true);
+
+                CatalogSources.Add(new CatalogSourceStatusViewModel(source, lastRun));
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogDebug(ex, "Could not read the catalogue source status.");
+        }
     }
 
     /// <summary>Adds a folder to the scan list.</summary>

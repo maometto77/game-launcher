@@ -308,6 +308,18 @@ public sealed class ScriptableCatalogSource : ICatalogSource
         FeedCatalog catalog,
         CancellationToken cancellationToken)
     {
+        // Belt and braces. Validation refuses a catalogue section with no address
+        // at load, so reaching here means something upstream picked a manifest
+        // this source cannot read — worth a line in the log rather than a crash
+        // that takes every other feed down with it.
+        if (string.IsNullOrWhiteSpace(catalog.Request?.Url))
+        {
+            _logger.LogWarning(
+                "Custom feed '{Key}' has no catalogue address to fetch; skipping it.", manifest.Key);
+
+            return null;
+        }
+
         var request = catalog.Request.Url;
 
         if (!Uri.TryCreate(request, UriKind.Absolute, out var address) ||
@@ -431,9 +443,9 @@ public sealed class ScriptableCatalogSource : ICatalogSource
                 // Read through the same digest filter the sourcing half uses,
                 // so a feed publishing "unknown" in a checksum field is left
                 // unverified rather than made to fail every transfer.
-                Sha256 = FeedDownloadMapper.Digest(item.String(catalog.Map.Sha256)),
-                Sha1 = FeedDownloadMapper.Digest(item.String(catalog.Map.Sha1)),
-                Md5 = FeedDownloadMapper.Digest(item.String(catalog.Map.Md5)),
+                Sha256 = HexDigest.Clean(item.String(catalog.Map.Sha256)),
+                Sha1 = HexDigest.Clean(item.String(catalog.Map.Sha1)),
+                Md5 = HexDigest.Clean(item.String(catalog.Map.Md5)),
 
                 Kind = downloadUrl.AbsolutePath.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase) ||
                        downloadUrl.Scheme == "magnet"

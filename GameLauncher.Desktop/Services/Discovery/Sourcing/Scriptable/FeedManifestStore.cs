@@ -273,6 +273,11 @@ public sealed class FeedManifestStore : IFeedManifestStore
         new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .WithCaseInsensitivePropertyMatching()
+
+            // So 'strategy: direct-link' reads as it is documented. The default
+            // conversion knows only a member's own name, which would make the
+            // published spelling of the manifest format fail to load.
+            .WithTypeConverter(new FlexibleEnumConverter())
             .IgnoreUnmatchedProperties()
             .Build();
 

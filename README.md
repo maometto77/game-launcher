@@ -37,12 +37,19 @@ configured, and nothing in the launcher blocks on the network.
   checksum the source published. **Off by default:** nothing is fetched from any
   source until you turn it on in Settings.
 - **Custom sourcing feeds** — describe your own feed in a YAML or JSON file in
-  `%LOCALAPPDATA%\GameLauncher\adapters\` and the launcher takes download
+  `%LOCALAPPDATA%\Don\adapters\` and the launcher takes download
   addresses from it: a home server, a preservation project's export, an RSS feed
   of releases, or a JSON file on this machine with no server at all. Checksums
   and torrents come through the same path as everything else. When mapping is
   not enough, a manifest can pipe the payload through a program you nominate.
   [Full contract](docs/sourcing-adapters.md).
+- **Crawling a site with no feed** — most sites publish pages rather than feeds.
+  Point a manifest at a listing address and the crawler infers the rest: the
+  repeated blocks, the link to each game's page, the pagination, the titles,
+  covers, dates and descriptions. Selector overrides correct anything it gets
+  wrong. `robots.txt` is honoured on every request and no setting overrides it,
+  every limit is finite, and no script from a crawled page is ever executed.
+  [Full contract](docs/generic-crawler.md).
 
 ## Layout
 
@@ -142,7 +149,7 @@ fail by design. That is the only command-line switch.
 
 ### Where your data lives
 
-Everything is under `%LOCALAPPDATA%\GameLauncher`. Nothing is written next to the
+Everything is under `%LOCALAPPDATA%\Don`. Nothing is written next to the
 executable, so the app runs from Program Files without elevation.
 
 | Path | Contents |
@@ -159,7 +166,7 @@ executable, so the app runs from Program Files without elevation.
 > your relay auth token, which is unrecoverable — the relay stores a hash, not the
 > token.
 
-To reset to a first-run state, delete `%LOCALAPPDATA%\GameLauncher`. The next
+To reset to a first-run state, delete `%LOCALAPPDATA%\Don`. The next
 start recreates it and migrates a fresh database.
 
 > Reading `gamelauncher.db` with an external tool: it runs in WAL mode. Copy the
@@ -202,6 +209,8 @@ For anything beyond your own machine, see **[docs/deployment.md](docs/deployment
 | [docs/project-handoff.md](docs/project-handoff.md) | The full picture: architecture, schema, decisions and their reasoning, conventions, testing, open questions. **Start here to work on the code.** |
 | [docs/catalog-identity.md](docs/catalog-identity.md) | Shared catalog identity, merging duplicates, moving between relays |
 | [docs/catalog-import-design.md](docs/catalog-import-design.md) | The discovery catalogue: sources, matching, merging, and what running it against the live APIs changed |
+| [docs/sourcing-adapters.md](docs/sourcing-adapters.md) | Describing your own feed in a file: mapping, script hooks, priorities, what an address may be |
+| [docs/generic-crawler.md](docs/generic-crawler.md) | Crawling a site that publishes no feed: inference, selector overrides, download resolution, limits, security rules, troubleshooting |
 | [docs/relay-architecture.md](docs/relay-architecture.md) | Authentication, sync conflict resolution, portability |
 | [docs/deployment.md](docs/deployment.md) | Hosting the relay: reverse proxy, tunnels, LAN vs internet, backups |
 

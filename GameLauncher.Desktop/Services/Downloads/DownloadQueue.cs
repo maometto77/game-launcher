@@ -584,6 +584,10 @@ public sealed class DownloadQueue : IDownloadQueue, IDisposable
         // other update would read as a fault rather than as no news.
         job.Peers = transfer.Peers ?? job.Peers;
         job.Seeders = transfer.Seeders ?? job.Seeders;
+
+        job.ResolvingMetadata = transfer.ResolvingMetadata;
+        job.StalledFor = transfer.StalledFor;
+        job.StallLimit = transfer.StallLimit;
     }
 
     /// <summary>Finds a job by identity. The caller holds the lock.</summary>

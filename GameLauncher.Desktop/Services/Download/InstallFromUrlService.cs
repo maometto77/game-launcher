@@ -188,6 +188,19 @@ public sealed class InstallFromUrlService : IInstallFromUrlService
     {
         var builder = new StringBuilder();
 
+        // A magnet has no size, no rate and no file names until a peer supplies
+        // the torrent metadata, so there is nothing to put in the usual line —
+        // and a row reading "0 B" is exactly what makes a transfer that is
+        // working look like one that has died.
+        if (update.ResolvingMetadata)
+        {
+            builder.Append("Resolving torrent metadata…");
+            AppendConnections(builder, update);
+            AppendWait(builder, update);
+
+            return builder.ToString();
+        }
+
         builder.Append(Helpers.ByteSizeConverter.Format(update.BytesReceived));
 
         if (update.TotalBytes is { } total)
@@ -207,7 +220,69 @@ public sealed class InstallFromUrlService : IInstallFromUrlService
             builder.Append("  ·  ").Append(DescribeRemaining(remaining)).Append(" left");
         }
 
+        AppendConnections(builder, update);
+        AppendWait(builder, update);
+
         return builder.ToString();
+    }
+
+    /// <summary>Appends the peer and seeder counts, where there are any to report.</summary>
+    /// <param name="builder">Line being built.</param>
+    /// <param name="update">The progress update.</param>
+    /// <remarks>
+    /// Zero peers is the single most useful thing on the line when a torrent is
+    /// not moving, and it is distinguished from a transport that does not count
+    /// them at all — an HTTP fetch gets no peer text rather than a misleading
+    /// zero.
+    /// </remarks>
+    private static void AppendConnections(StringBuilder builder, DownloadProgress update)
+    {
+        if (update.Peers is not { } peers)
+        {
+            return;
+        }
+
+        builder.Append("  ·  ").Append(peers).Append(peers == 1 ? " peer" : " peers");
+
+        if (update.Seeders is { } seeders)
+        {
+            builder.Append(", ").Append(seeders).Append(seeders == 1 ? " seed" : " seeds");
+        }
+    }
+
+    /// <summary>Appends how long a stalled transfer has left before it is abandoned.</summary>
+    /// <param name="builder">Line being built.</param>
+    /// <param name="update">The progress update.</param>
+    /// <remarks>
+    /// A wait with no visible end is what makes people cancel a transfer that was
+    /// about to start. Saying how much of the deadline is left turns "frozen"
+    /// into "still trying, and here is for how long".
+    /// </remarks>
+    private static void AppendWait(StringBuilder builder, DownloadProgress update)
+    {
+        if (update.StalledFor is not { } stalled)
+        {
+            return;
+        }
+
+        // With a deadline, the useful thing is how much of it is left. Without
+        // one, it is how long the silence has lasted — a transfer that will wait
+        // indefinitely should say so rather than imply a countdown it does not
+        // have.
+        if (update.StallLimit is not { } limit)
+        {
+            builder.Append("  ·  ")
+                   .Append($"nothing received for {DescribeRemaining(stalled)}");
+
+            return;
+        }
+
+        var left = limit - stalled;
+
+        builder.Append("  ·  ")
+               .Append(left > TimeSpan.Zero
+                   ? $"nothing yet, giving up in {DescribeRemaining(left)}"
+                   : "giving up");
     }
 
     /// <summary>Formats a remaining duration in coarse, honest terms.</summary>

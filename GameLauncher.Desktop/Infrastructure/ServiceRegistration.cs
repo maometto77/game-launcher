@@ -7,6 +7,7 @@ using GameLauncher.Desktop.Services.Catalog;
 using GameLauncher.Desktop.Services.Database;
 using GameLauncher.Desktop.Services.Dialogs;
 using GameLauncher.Desktop.Services.Discovery;
+using GameLauncher.Desktop.Services.Discovery.Crawling;
 using GameLauncher.Desktop.Services.Discovery.Http;
 using GameLauncher.Desktop.Services.Discovery.Images;
 using GameLauncher.Desktop.Services.Discovery.Import;
@@ -14,8 +15,10 @@ using GameLauncher.Desktop.Services.Discovery.Install;
 using GameLauncher.Desktop.Services.Discovery.Matching;
 using GameLauncher.Desktop.Services.Discovery.Normalization;
 using GameLauncher.Desktop.Services.Discovery.Sourcing;
+using GameLauncher.Desktop.Services.Discovery.Sourcing.Html;
 using GameLauncher.Desktop.Services.Discovery.Sourcing.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources;
+using GameLauncher.Desktop.Services.Discovery.Sources.Crawler;
 using GameLauncher.Desktop.Services.Discovery.Sources.Scriptable;
 using GameLauncher.Desktop.Services.Discovery.Sources.SharedCatalog;
 using GameLauncher.Desktop.Services.Download;
@@ -29,6 +32,8 @@ using GameLauncher.Desktop.Services.Settings;
 using GameLauncher.Desktop.ViewModels;
 using GameLauncher.Desktop.Views;
 using Microsoft.Extensions.DependencyInjection;
+using System.Net;
+using System.Net.Http;
 
 namespace GameLauncher.Desktop.Infrastructure;
 
@@ -61,6 +66,20 @@ public static class ServiceRegistration
 
         services.AddSingleton(paths);
         services.AddSingleton(options);
+
+        services.AddHttpClient("discovery-custom-feeds", client =>
+        {
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Accept.ParseAdd(
+                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
+        })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+        AllowAutoRedirect = true
+    });
 
         AddInfrastructure(services);
         AddDataAccess(services);
@@ -105,6 +124,10 @@ public static class ServiceRegistration
 
         // Migrates the schema before the shell window is shown.
         services.AddHostedService<DatabaseStartupService>();
+
+        // Before anything can queue a download, so an abandoned helper is not
+        // still holding the file a fresh attempt wants to write.
+        services.AddHostedService<DownloadHelperSweepService>();
 
         // Reads the achievement files Steam emulators leave on disk. Registered
         // before the notifier because the notifier subscribes to it, and as one
@@ -220,6 +243,28 @@ public static class ServiceRegistration
         // is the most confusing thing about writing one.
         services.AddSingleton<ICatalogSource, ScriptableCatalogSource>();
 
+        // The same idea for sites that publish pages rather than a feed, which
+        // is most of them. A manifest naming one address is enough; the crawler
+        // infers the rest and takes selector overrides where it guesses wrong.
+        services.AddSingleton<ICatalogSource, CrawlerCatalogSource>();
+
+        services.AddHttpClient(PageFetcher.HttpClientName, client =>
+        {
+            // A page is a document, not a download. Short enough that one slow
+            // site does not stall an import, generous enough for a small server.
+            client.Timeout = TimeSpan.FromSeconds(45);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
+        })
+
+        // Redirects are followed, but only a few: a redirect is an address
+        // chosen by the far side, and a chain of them is either a loop or
+        // somebody moving a target while we look at it.
+        .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.HttpClientHandler
+        {
+            AllowAutoRedirect = true,
+            MaxAutomaticRedirections = 5
+        });
+
         services.AddHttpClient(ScriptableCatalogSource.HttpClientName, client =>
         {
             // A catalogue document is larger than a per-listing lookup and may
@@ -276,6 +321,12 @@ public static class ServiceRegistration
         // through to the built-in adapter below.
         services.AddSingleton<IFeedManifestStore, FeedManifestStore>();
         services.AddSingleton<IScriptHookRunner, ScriptHookRunner>();
+        // The manifest 'sourcing' section, with its three strategies. Ahead of
+        // the older feed-mapping adapter so a manifest that declares both gets
+        // the newer contract, and ahead of the built-ins for the usual reason
+        // that configuration beats defaults.
+        services.AddSingleton<ISourcingAdapter, ManifestSourcingAdapter>();
+
         services.AddSingleton<ISourcingAdapter, ScriptableSourcingAdapter>();
 
         services.AddSingleton<ISourcingAdapter, InternetArchiveSourcingAdapter>();
@@ -333,6 +384,10 @@ public static class ServiceRegistration
             client.Timeout = TimeSpan.FromMinutes(3);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLauncher/1.0");
         });
+
+        // Shared by the transport, which records what it starts, and by the
+        // startup sweep, which stops whatever a previous run left behind.
+        services.AddSingleton<DownloadHelperRegistry>();
 
         services.AddSingleton<IDownloadTransport, Aria2DownloadTransport>();
         services.AddSingleton<IDownloadTransport, HttpDownloadTransport>();

@@ -24,7 +24,24 @@ public sealed record Aria2Status(
     long? TotalBytes,
     double BytesPerSecond,
     int? Connections,
-    int? Seeders);
+    int? Seeders)
+{
+    /// <summary>Gets a value indicating whether this transfer is a torrent.</summary>
+    public bool IsTorrent { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether a torrent is still fetching its metadata.
+    /// </summary>
+    /// <remarks>
+    /// True for the phase a magnet link starts in. A magnet names an info-hash
+    /// and nothing else, so aria2 has to find a peer holding the torrent's info
+    /// dictionary before it knows the file names or the size — and until it does
+    /// there is no total, no progress and no rate to report. Indistinguishable
+    /// from a dead transfer unless it is said out loud, which is the whole reason
+    /// this exists.
+    /// </remarks>
+    public bool MetadataPending { get; init; }
+}
 
 /// <summary>
 /// The loopback endpoint and credential one aria2c process listens on.
@@ -112,7 +129,7 @@ public sealed class Aria2RpcClient
     /// an unrelated change to aria2's schema cannot break the parse.
     /// </summary>
     private static readonly string[] StatusKeys =
-        ["gid", "completedLength", "totalLength", "downloadSpeed", "connections", "numSeeders"];
+        ["gid", "completedLength", "totalLength", "downloadSpeed", "connections", "numSeeders", "bittorrent"];
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -221,18 +238,51 @@ public sealed class Aria2RpcClient
     /// </summary>
     /// <param name="element">The object aria2 returned.</param>
     /// <returns>The status.</returns>
-    private static Aria2Status ReadStatus(JsonElement element) => new(
-        Number(element, "completedLength") ?? 0,
+    private static Aria2Status ReadStatus(JsonElement element)
+    {
+        // Present only for a torrent, and its 'info' member only once the
+        // metadata has arrived — which is precisely aria2's own test for whether
+        // a magnet has resolved yet.
+        var torrent = element.ValueKind == JsonValueKind.Object &&
+                      element.TryGetProperty("bittorrent", out var bt) &&
+                      bt.ValueKind == JsonValueKind.Object
+            ? bt
+            : (JsonElement?)null;
 
-        // aria2 reports zero before it knows the size, which is not the same as
-        // a zero-byte file and must not be shown as a complete progress bar.
-        Number(element, "totalLength") is > 0 and var total ? total : null,
-        Number(element, "downloadSpeed") ?? 0,
-        Count(element, "connections"),
+        return new Aria2Status(
+            Number(element, "completedLength") ?? 0,
 
-        // Absent for anything that is not a torrent, which is exactly the
-        // distinction the interface wants: no seeder column for an HTTP fetch.
-        Count(element, "numSeeders"));
+            // aria2 reports zero before it knows the size, which is not the same
+            // as a zero-byte file and must not be shown as a complete progress bar.
+            Number(element, "totalLength") is > 0 and var total ? total : null,
+            Number(element, "downloadSpeed") ?? 0,
+            Count(element, "connections"),
+
+            // Absent for anything that is not a torrent, which is exactly the
+            // distinction the interface wants: no seeder column for an HTTP fetch.
+            Count(element, "numSeeders"))
+        {
+            // Either signal is enough: aria2 supplies the bittorrent member for a
+            // torrent, and a seeder count is only ever reported for one.
+            IsTorrent = torrent is not null || Count(element, "numSeeders") is not null,
+
+            // Only answerable from the bittorrent member. Without it there is no
+            // claim to make, and guessing would put "finding peers" on a web
+            // download.
+            MetadataPending = torrent is { } present && !HasInfoDictionary(present)
+        };
+    }
+
+    /// <summary>Determines whether a torrent's metadata has arrived.</summary>
+    /// <param name="torrent">aria2's <c>bittorrent</c> member.</param>
+    /// <returns><see langword="true"/> once the info dictionary is there.</returns>
+    /// <remarks>
+    /// aria2 omits <c>info</c> until the torrent metadata has been retrieved, so
+    /// its absence is the signal that a magnet is still looking for a peer that
+    /// can supply it.
+    /// </remarks>
+    private static bool HasInfoDictionary(JsonElement torrent) =>
+        torrent.TryGetProperty("info", out var info) && info.ValueKind == JsonValueKind.Object;
 
     /// <summary>Reads a string-encoded integer field.</summary>
     /// <param name="element">The object to read from.</param>

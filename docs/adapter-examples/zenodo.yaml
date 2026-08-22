@@ -3,7 +3,7 @@
 # Holds preserved software and game-history datasets among everything else.
 # Public REST API, no key, no account.
 #
-# Copy this file into %LOCALAPPDATA%\GameLauncher\adapters\ to use it.
+# Copy this file into %LOCALAPPDATA%\Don\adapters\ to use it.
 #
 # The path matters. Zenodo's robots.txt disallows /api generally and then
 # allows exactly one thing back:

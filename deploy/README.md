@@ -112,6 +112,29 @@ A directory listing, served publicly. Anyone with the link can download it, whic
 is the point: a friend should not need an account to install the thing that
 creates their account. **Nothing secret belongs in `dist/`.**
 
+### Handing over a configured copy
+
+Build with the two URLs and the archive arrives already pointed at your server:
+
+```powershell
+.\deploy\installer\build-release.ps1 `
+    -RelayUrl   https://relay.example.com `
+    -CatalogUrl https://relay.example.com/feed/catalog.json
+```
+
+Whoever installs it gets those settings, plus every adapter manifest in
+`deploy/installer/provision/adapters/`, without entering anything. Nothing to
+paste, nothing to explain.
+
+Provisioning is **first-run only**, and both halves of that matter: an adapter
+that already exists is left alone, so someone's edit survives every upgrade; and
+`settings.json` is written only when there is none, because it holds the relay
+token, which the relay stores as a hash and cannot reissue. `-NoProvision` skips
+it. Details in [`installer/provision/README.md`](installer/provision/README.md).
+
+Note that a sourcing adapter is not how your catalogue reaches people — that is
+`-CatalogUrl`, which is a setting. The two are easy to confuse.
+
 ### What they do
 
 Extract, double-click `Install.cmd`.

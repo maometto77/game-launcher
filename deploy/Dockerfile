@@ -17,7 +17,14 @@ WORKDIR /src
 # actually changes rather than on every source edit.
 COPY GameLauncher.Shared/GameLauncher.Shared.csproj GameLauncher.Shared/
 COPY GameLauncher.Relay/GameLauncher.Relay.csproj  GameLauncher.Relay/
-COPY global.json ./
+
+# Directory.Build.props carries ImplicitUsings, Nullable and LangVersion for
+# every project in the solution. Without it the container compiles against
+# different language settings than any developer machine does, and the failure
+# names types rather than the cause: DateTimeOffset, Task and IReadOnlyList all
+# "could not be found", because the implicit usings that import them were never
+# switched on.
+COPY global.json Directory.Build.props ./
 
 RUN dotnet restore GameLauncher.Relay/GameLauncher.Relay.csproj
 

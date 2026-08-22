@@ -288,7 +288,7 @@ friend cache, and registers afresh. Nothing local is lost — games, playtime,
 achievements and collections all survive — but friendships and the shared
 history on the server are gone, and users get a new friend code.
 
-Client-side, the equivalent file is `%LOCALAPPDATA%\GameLauncher\settings.json`,
+Client-side, the equivalent file is `%LOCALAPPDATA%\Don\settings.json`,
 which holds each device's auth token. The relay stores only a hash, so a lost
 token cannot be recovered — that device registers again as a new one.
 

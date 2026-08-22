@@ -26,7 +26,13 @@ comes from not noticing there are two:
 | Section | Answers |
 |---|---|
 | `catalog` | What games are there. Fills the Discover grid. |
+| `crawler` | The same question, for a site with no feed. See below. |
 | `match` / `request` / `map` | Given one of them, what can be downloaded. |
+| `sourcing` | The same question, read off the game's own page. See below. |
+
+The first column pairs off: `catalog` and `crawler` both fill the grid, and
+`match`/`request`/`map` and `sourcing` both answer Install. Which of each pair
+you write depends on whether the site publishes a feed or only pages.
 
 **A manifest with only the second does nothing on its own.** It needs the
 catalogue to already hold listings from a host it claims, so a file that looks
@@ -35,6 +41,28 @@ empty catalogue, write the `catalog` half first.
 
 Both together is the useful combination for a site nobody else covers: one
 section finds the games, the other works out how to fetch them.
+
+### Sites with no feed at all
+
+`crawler:` and `sourcing:` are for the common case where a site publishes pages
+rather than a feed. The shortest form is one address:
+
+```yaml
+key: my-site
+crawler:
+  url: https://example.org/games/
+```
+
+The crawler infers the listing blocks, the link to each game's page, the
+pagination, and the metadata on the page it reaches; `sourcing:` reads the
+download addresses off that same page when somebody presses Install. Selector
+overrides correct any guess it gets wrong, and every limit, every address check
+and `robots.txt` apply exactly as they do here.
+
+**`docs/generic-crawler.md` documents both sections in full** — every field,
+the three sourcing strategies, the external-resolver contract, checksums, the
+security rules, and what to do when a site does not parse. The rest of this
+document is about feeds.
 
 ### Filling the catalogue
 
@@ -119,14 +147,16 @@ the addresses are in the answer.
 | `displayName` | no | What a person sees. Defaults to `key`. |
 | `enabled` | no | `false` parks a manifest without deleting it. Defaults to `true`. |
 | `priority` | no | Where this feed's addresses sit in the mirror list. Defaults to `100`. |
-| `match.hosts` | yes | Hosts this feed answers for, matched on suffix — `example.org` also claims `files.example.org`. |
+| `match.hosts` | for feeds | Hosts this feed answers for, matched on suffix — `example.org` also claims `files.example.org`. Not needed by a `crawler`-only or `sourcing`-only manifest. |
 | `match.pathContains` | no | Narrows it further: only addresses containing one of these. |
-| `request.url` | yes | What to fetch. A value with no scheme is read from a file beside the manifest. |
+| `request.url` | for feeds | What to fetch. A value with no scheme is read from a file beside the manifest. Not needed when `crawler` or `sourcing` does the resolving. |
 | `request.headers` | no | Extra request headers. |
 | `format` | no | `json`, `yaml` or `feed` (RSS *and* Atom). Defaults to `json`. |
 | `items` | no | Path to the list of downloads in the payload. Empty means the payload is the list. |
 | `map.*` | `url` only | Which field of an item supplies each part of a download. |
 | `transform` | no | An external program run over the payload first. See below. |
+| `crawler.*` | no | Crawl a site that publishes no feed. See `docs/generic-crawler.md`. |
+| `sourcing.*` | no | Resolve downloads off a game's own page. See `docs/generic-crawler.md`. |
 
 ### Paths
 
@@ -166,7 +196,14 @@ would fail every transfer with a mismatch that is really a feed typo.
 Which of the three you map is only a label: an `md5:` or `sha256:` prefix is
 stripped, and the algorithm is inferred from the digest's length when the
 transfer is checked. A feed publishing one `checksum` field can be mapped to any
-of them.
+of them. The file name that `sha256sum` prints after the digest is dropped too,
+so a field holding a whole line of that output still works.
+
+One implementation decides this for every source — feeds, crawled pages, shared
+catalogues and external resolvers alike — because they all feed one verification
+path, and disagreeing about what counts as a digest would mean the same
+published value verifying a download from one source and failing it from
+another.
 
 ---
 
@@ -393,8 +430,18 @@ Asked after your manifests, in this order.
 | Internet Archive | any `archive.org` address naming an item | Reads the public metadata API. Direct addresses, both node-host mirrors, per-file SHA-1 and MD5, and the item's `.torrent` last. Access-restricted items are explained rather than offered. |
 | MyAbandonware | `myabandonware.com` | Refuses. The site's own `robots.txt` disallows `/download/*`, so there is no download it can honestly produce. Checked against the live rules on every attempt, not hardcoded. |
 | Custom feeds | whatever your manifests claim | This document. |
+| Manifest sourcing | pages a `sourcing:` block claims | Reads addresses off the game's own page, uses one the catalogue recorded, or asks a program you nominate. See `docs/generic-crawler.md`. |
 
 When no adapter can supply a download, the launcher looks for the same game
 described by another listing in the catalogue and uses its address instead. A
 game MyAbandonware describes and the Archive also holds is installable through
 the Archive and better described because of MyAbandonware.
+
+---
+
+## See also
+
+- `docs/generic-crawler.md` — sites with no feed: the `crawler:` and `sourcing:`
+  sections, in full
+- `docs/catalog-import-design.md` — how listings become catalogue entries
+- `docs/adapter-examples/` — commented manifests and script skeletons

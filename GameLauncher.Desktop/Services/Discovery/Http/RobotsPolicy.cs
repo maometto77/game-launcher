@@ -232,6 +232,10 @@ public sealed class RobotsPolicy : IRobotsPolicy
         {
             var client = _httpClientFactory.CreateClient(HttpClientName);
 
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+            client.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.9");
+
             using var response = await client
                 .GetAsync($"{host}/robots.txt", cancellationToken)
                 .ConfigureAwait(false);

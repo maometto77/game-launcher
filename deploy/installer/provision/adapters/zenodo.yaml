@@ -1,0 +1,48 @@
+# Zenodo — an open research repository run by CERN.
+#
+# Holds preserved software and game-history datasets among everything else.
+# Public REST API, no key, no account.
+#
+# Installed into %LOCALAPPDATA%\Don\adapters\ by the installer, so it is already
+# in place. Edit it freely: an upgrade leaves a manifest that already exists
+# alone. See deploy/installer/provision/README.md.
+#
+# The path matters. Zenodo's robots.txt disallows /api generally and then
+# allows exactly one thing back:
+#
+#     Disallow: /api
+#     Allow:    /api/records/*/files
+#
+# So this manifest asks the files endpoint for a record it already knows about,
+# rather than searching. A manifest pointed at /api/records?q=... would be
+# refused by the launcher's robots check, correctly — verified against the live
+# rules on 2026-08-09.
+#
+# {slug} is the last segment of the listing address, which for a Zenodo record
+# page (https://zenodo.org/records/21012370) is the record id.
+
+key: zenodo
+displayName: Zenodo
+enabled: true
+
+match:
+  hosts: [zenodo.org]
+  pathContains: ['/records/']
+
+request:
+  url: https://zenodo.org/api/records/{slug}/files
+
+format: json
+
+# The endpoint answers { "entries": [ { key, size, checksum, links: {...} } ] }.
+items: entries
+
+map:
+  # 'content' is the bytes; 'self' is the file's metadata document.
+  url: links.content
+  fileName: key
+  sizeBytes: size
+
+  # Published as 'md5:984da7f7...'. The prefix is stripped; the algorithm is
+  # inferred from the digest's length when the download is verified.
+  md5: checksum

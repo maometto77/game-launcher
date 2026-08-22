@@ -77,6 +77,51 @@ public sealed class ScriptableCatalogTests
     }
 
     [Fact]
+    public async Task A_crawler_only_manifest_does_not_reach_the_feed_reader()
+    {
+        // A regression guard with a real incident behind it. Adding the crawler
+        // made ProvidesCatalog mean "fills the catalogue somehow", which handed
+        // the feed reader manifests that have no catalog section at all — and it
+        // dereferenced one, throwing a NullReferenceException that was outside
+        // the caught set and took every other custom feed down with it.
+        using var host = new TestAppHost();
+        var directory = host.Resolve<IAppPaths>().AdapterDirectory;
+
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "crawler-only.yaml"),
+            """
+            key: crawler-only
+            displayName: Crawler only
+            crawler:
+              url: https://example.test/games/
+
+            """);
+
+        var manifest = Assert.Single(await host.Resolve<IFeedManifestStore>().GetAsync());
+
+        Assert.Empty(manifest.Validate());
+        Assert.True(manifest.ProvidesCrawler);
+
+        // The crawler fills the catalogue through its own source. This one has
+        // nothing to read.
+        Assert.False(manifest.ProvidesCatalog);
+
+        var source = Source(host);
+
+        Assert.False(source.IsAvailable);
+
+        // And enumerating anyway must be empty rather than explosive.
+        var seen = new List<SourceListingRef>();
+
+        await foreach (var reference in source.EnumerateAsync(new SourceEnumerationOptions()))
+        {
+            seen.Add(reference);
+        }
+
+        Assert.Empty(seen);
+    }
+
+    [Fact]
     public void A_manifest_that_does_nothing_at_all_is_refused()
     {
         var problems = new FeedManifest { Key = "empty" }.Validate();

@@ -38,6 +38,9 @@
 .PARAMETER Launch
     Start Don when the install finishes.
 
+.PARAMETER NoProvision
+    Skip the provision folder: install no adapter manifests and seed no settings.
+
 .EXAMPLE
     .\Install-Don.ps1
     Installs for the current user, with a Start Menu shortcut.
@@ -54,7 +57,8 @@ param(
     [switch]   $DesktopShortcut,
     [switch]   $NoStartMenu,
     [switch]   $Silent,
-    [switch]   $Launch
+    [switch]   $Launch,
+    [switch]   $NoProvision
 )
 
 Set-StrictMode -Version Latest
@@ -333,6 +337,85 @@ else {
     }
 
     Write-Step 'Registered in Add/Remove Programs'
+}
+
+# ------------------------------------------------------------- provisioning
+
+# What a fresh install starts out with: the adapter manifests whoever built this
+# release chose to ship, and the settings they configured it with.
+#
+# This writes into the library rather than the install directory, and so it is
+# governed by one rule throughout: never overwrite. A person's edited manifest
+# and, far more importantly, their settings.json survive every upgrade. That
+# file holds the relay token, which the relay stores as a hash and cannot
+# reissue: replacing it would sign them out permanently with no way back.
+#
+# Per-user, because the library is. An -AllUsers install therefore provisions
+# only the account that ran it; anyone else gets the launcher's own defaults.
+
+$provisionDir = Join-Path $Source 'provision'
+
+if (-not $NoProvision -and (Test-Path -LiteralPath $provisionDir)) {
+    $libraryRoot = Join-Path $env:LOCALAPPDATA $AppName
+
+    $adapterSource = Join-Path $provisionDir 'adapters'
+
+    if (Test-Path -LiteralPath $adapterSource) {
+        $adapterTarget = Join-Path $libraryRoot 'adapters'
+
+        if (-not (Test-Path -LiteralPath $adapterTarget)) {
+            $null = New-Item -ItemType Directory -Path $adapterTarget -Force
+        }
+
+        $added = 0
+        $kept = 0
+
+        foreach ($adapter in Get-ChildItem -LiteralPath $adapterSource -File) {
+            $destination = Join-Path $adapterTarget $adapter.Name
+
+            if (Test-Path -LiteralPath $destination) {
+                $kept++
+                continue
+            }
+
+            Copy-Item -LiteralPath $adapter.FullName -Destination $destination
+            $added++
+        }
+
+        if ($added -gt 0) {
+            Write-Step "Installed $added source adapter(s)"
+        }
+
+        if ($kept -gt 0) {
+            Write-Step "Kept $kept adapter(s) already present"
+        }
+    }
+
+    $seed = Join-Path $provisionDir 'settings.defaults.json'
+    $settingsFile = Join-Path $libraryRoot 'settings.json'
+
+    if (Test-Path -LiteralPath $seed) {
+        if (Test-Path -LiteralPath $settingsFile) {
+            Write-Step 'Kept your existing settings'
+        }
+        else {
+            if (-not (Test-Path -LiteralPath $libraryRoot)) {
+                $null = New-Item -ItemType Directory -Path $libraryRoot -Force
+            }
+
+            Copy-Item -LiteralPath $seed -Destination $settingsFile
+
+            $configured = (Get-Content -LiteralPath $seed -Raw | ConvertFrom-Json)
+
+            if ($configured.PSObject.Properties.Name -contains 'relayUrl') {
+                Write-Step "Configured for $($configured.relayUrl)"
+            }
+
+            if ($configured.PSObject.Properties.Name -contains 'sharedCatalogUrl') {
+                Write-Step "Shared catalogue: $($configured.sharedCatalogUrl)"
+            }
+        }
+    }
 }
 
 # -------------------------------------------------------------------- done

@@ -127,6 +127,19 @@ public sealed class DownloadJob
     /// </remarks>
     public int? Seeders { get; set; }
 
+    /// <summary>Whether a torrent is still fetching its metadata.</summary>
+    /// <remarks>
+    /// The phase a magnet starts in, where no size or rate exists yet. Held on
+    /// the job so the row can say so instead of showing an empty transfer.
+    /// </remarks>
+    public bool ResolvingMetadata { get; set; }
+
+    /// <summary>How long the transfer has moved nothing, when it is being timed.</summary>
+    public TimeSpan? StalledFor { get; set; }
+
+    /// <summary>How long a stall is tolerated before the engine gives up.</summary>
+    public TimeSpan? StallLimit { get; set; }
+
     /// <summary>Where the finished download was unpacked, once it has been.</summary>
     public string? InstallDirectory { get; set; }
 

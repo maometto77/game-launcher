@@ -64,9 +64,9 @@ public static class FeedDownloadMapper
                 Url = url.AbsoluteUri,
                 FileName = item.String(manifest.Map.FileName) ?? DeriveFileName(url),
                 SizeBytes = item.Int64(manifest.Map.SizeBytes),
-                Sha256 = Digest(item.String(manifest.Map.Sha256)),
-                Sha1 = Digest(item.String(manifest.Map.Sha1)),
-                Md5 = Digest(item.String(manifest.Map.Md5)),
+                Sha256 = HexDigest.Clean(item.String(manifest.Map.Sha256)),
+                Sha1 = HexDigest.Clean(item.String(manifest.Map.Sha1)),
+                Md5 = HexDigest.Clean(item.String(manifest.Map.Md5)),
                 Format = item.String(manifest.Map.Format) ?? DeriveFormat(url, kind),
                 Kind = kind,
 
@@ -156,49 +156,5 @@ public static class FeedDownloadMapper
         var extension = Path.GetExtension(url.AbsolutePath);
 
         return extension.Length > 1 ? extension[1..].ToUpperInvariant() : null;
-    }
-
-    /// <summary>
-    /// Keeps a digest only if it looks like one.
-    /// </summary>
-    /// <param name="value">The published value.</param>
-    /// <returns>The digest in lower case, or <see langword="null"/>.</returns>
-    /// <remarks>
-    /// <para>
-    /// A field holding "unknown", "n/a" or a prose sentence is worse than an
-    /// absent one: the download service would compare against it and fail every
-    /// transfer with a checksum mismatch that is really a feed typo.
-    /// </para>
-    /// <para>
-    /// An <c>md5:</c> or <c>sha256:</c> prefix is stripped rather than rejected.
-    /// Real repositories publish that form — Zenodo does — and dropping a
-    /// perfectly good checksum over its punctuation would lose the verification
-    /// this launcher otherwise gets for free.
-    /// </para>
-    /// <para>
-    /// The accepted lengths are exactly those the download service can verify.
-    /// Which field a digest is mapped to is only a label: the algorithm is
-    /// inferred from the digest's length when the transfer is checked.
-    /// </para>
-    /// </remarks>
-    internal static string? Digest(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
-
-        var trimmed = value.Trim();
-
-        var separator = trimmed.IndexOf(':', StringComparison.Ordinal);
-
-        if (separator >= 0)
-        {
-            trimmed = trimmed[(separator + 1)..];
-        }
-
-        return trimmed.Length is 32 or 40 or 64 or 128 && trimmed.All(Uri.IsHexDigit)
-            ? trimmed.ToLowerInvariant()
-            : null;
     }
 }

@@ -225,12 +225,24 @@ detection. That decomposition is right. Four changes:
 
 ### 3.2 Component map
 
+> Written before the code existed, and describing the shape as designed. It has
+> since grown two branches that are worth naming here because they extend the
+> same seams rather than sitting beside them: `Crawling/`, a site-neutral HTML
+> crawler feeding `Sources/Crawler/CrawlerCatalogSource.cs` as one more
+> `ICatalogSource`, and `Sourcing/Html/`, which resolves downloads off a page as
+> one more `ISourcingAdapter`. Both are driven entirely by manifest files.
+> `docs/generic-crawler.md` is their contract.
+
 ```
 Services/Discovery/
 ├── ICatalogSource.cs              seam: one per site
 ├── Sources/
 │   ├── InternetArchiveCatalogSource.cs
-│   └── MyAbandonwareCatalogSource.cs
+│   ├── MyAbandonwareCatalogSource.cs
+│   ├── Scriptable/                manifest-declared feeds
+│   ├── SharedCatalog/             a catalogue published by another launcher
+│   └── Crawler/                   sites crawled from a manifest address
+├── Crawling/                      the crawler itself: fetch, parse, guard, limit
 ├── Model/
 │   ├── SourceListingRef.cs        cheap: id + title + change stamp
 │   ├── SourceListing.cs           full: what one source said
@@ -902,7 +914,7 @@ user has actually browsed to. Never screenshots.
 
 ### 8.2 Cache design
 
-- New `IAppPaths.ListingImageDirectory` (`%LOCALAPPDATA%\GameLauncher\listings`).
+- New `IAppPaths.ListingImageDirectory` (`%LOCALAPPDATA%\Don\listings`).
 - **Content-addressed filenames**: `SHA256(remoteUrl)` + extension. This makes
   invalidation automatic — a changed URL is a different file — and it continues
   the rule `ArtworkService` already states, that a name chosen by a remote server
@@ -1414,7 +1426,7 @@ user-extensible adapter and closes the Archive.org gap.
 
 ### 17.1 Manifests, not plugin assemblies
 
-A feed is a YAML or JSON file in `%LOCALAPPDATA%\GameLauncher\adapters\`. It
+A feed is a YAML or JSON file in `%LOCALAPPDATA%\Don\adapters\`. It
 says which hosts it claims, what to fetch, and which field of the answer is
 which. `ScriptableSourcingAdapter` is a single `ISourcingAdapter` serving all of
 them.

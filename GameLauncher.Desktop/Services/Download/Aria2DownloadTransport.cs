@@ -51,8 +51,26 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// <summary>How often progress is sampled.</summary>
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>How long a transfer must be quiet before that is worth reporting.</summary>
+    /// <remarks>
+    /// Long enough that a gap between two pieces does not make the row flicker
+    /// between moving and stalled, short enough to be visible before anyone
+    /// reaches for the cancel button.
+    /// </remarks>
+    private static readonly TimeSpan StallThreshold = TimeSpan.FromSeconds(5);
+
     /// <summary>How long to let aria2 shut itself down before it is killed.</summary>
     private static readonly TimeSpan ShutdownGrace = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// How long a torrent may transfer nothing before aria2 abandons it.
+    /// </summary>
+    /// <remarks>
+    /// Passed to aria2 as <c>--bt-stop-timeout</c> and reported alongside
+    /// progress, so a transfer that has found no peers shows how long it will
+    /// keep trying rather than looking frozen indefinitely.
+    /// </remarks>
+    private static readonly TimeSpan TorrentStallLimit = TimeSpan.FromMinutes(5);
 
     /// <summary>
     /// How long the RPC interface is given to answer before it is given up on.
@@ -69,6 +87,7 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     private readonly ISettingsService _settings;
     private readonly IExternalToolLocator _tools;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly DownloadHelperRegistry _helpers;
     private readonly ILogger<Aria2DownloadTransport> _logger;
 
     /// <summary>Every aria2c this transport has started and not yet seen exit.</summary>
@@ -81,6 +100,19 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// </remarks>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Process, byte> _live = new();
 
+    /// <summary>
+    /// Holds every aria2c this launcher starts, so the operating system kills
+    /// them if this process dies without getting to.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Dispose"/> covers a graceful exit and nothing else. A launcher
+    /// killed to free a locked file during a rebuild, stopped from an IDE, or
+    /// lost to a crash never runs it — and every one of those used to leave an
+    /// aria2c downloading invisibly, writing into files the next launch would
+    /// then fight over.
+    /// </remarks>
+    private readonly ChildProcessJob _job = new();
+
     private bool _disposed;
 
     /// <summary>
@@ -89,17 +121,20 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// <param name="settings">Supplies whether aria2 is enabled and where it lives.</param>
     /// <param name="tools">Finds the aria2c executable.</param>
     /// <param name="httpClientFactory">Supplies the client used for RPC calls.</param>
+    /// <param name="helpers">Records started helpers so an unclean exit can be cleaned up after.</param>
     /// <param name="logger">Logger for transfer diagnostics.</param>
     /// <exception cref="ArgumentNullException">Any argument is <see langword="null"/>.</exception>
     public Aria2DownloadTransport(
         ISettingsService settings,
         IExternalToolLocator tools,
         IHttpClientFactory httpClientFactory,
+        DownloadHelperRegistry helpers,
         ILogger<Aria2DownloadTransport> logger)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _tools = tools ?? throw new ArgumentNullException(nameof(tools));
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+        _helpers = helpers ?? throw new ArgumentNullException(nameof(helpers));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -245,12 +280,14 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
             // indefinitely: this is a launcher, not a torrent client, and a
             // process that never exits would look like a hung download.
             "--seed-time=0",
-            "--bt-stop-timeout=300",
+            "--bt-stop-timeout=" +
+                ((int)TorrentStallLimit.TotalSeconds).ToString(CultureInfo.InvariantCulture),
             "--follow-torrent=mem",
             request.Url.AbsoluteUri
         };
 
-        await RunAsync(executable, arguments, partPath: null, progress, cancellationToken)
+        await RunAsync(
+                executable, arguments, partPath: null, progress, cancellationToken, TorrentStallLimit)
             .ConfigureAwait(false);
 
         var produced = SnapshotEntries(request.DestinationDirectory)
@@ -284,13 +321,18 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// <param name="partPath">File to measure for progress, or <see langword="null"/>.</param>
     /// <param name="progress">Optional progress receiver.</param>
     /// <param name="cancellationToken">Cancels the transfer and kills the process.</param>
+    /// <param name="stallLimit">
+    /// How long the transfer may move nothing before aria2 abandons it, or
+    /// <see langword="null"/> when it has no such deadline.
+    /// </param>
     /// <exception cref="InvalidOperationException">aria2c exited with a failure code.</exception>
     private async Task RunAsync(
         string executable,
         IReadOnlyList<string> arguments,
         string? partPath,
         IProgress<DownloadProgress>? progress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? stallLimit = null)
     {
         var info = new ProcessStartInfo(executable)
         {
@@ -358,6 +400,18 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
 
         _live[process] = 0;
 
+        // Recorded before anything else can go wrong, so a launcher killed in the
+        // next instant still leaves a note about what it started.
+        _helpers.Register(process);
+
+        if (!_job.Assign(process) && _job.IsEnforced)
+        {
+            _logger.LogDebug(
+                "aria2c {Pid} could not be placed under this launcher's job object; " +
+                "it will be stopped on a clean exit but could survive a kill.",
+                process.Id);
+        }
+
         process.BeginErrorReadLine();
         process.BeginOutputReadLine();
 
@@ -370,7 +424,7 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
 
         var reporter = progress is null
             ? Task.CompletedTask
-            : ReportProgressAsync(rpc, partPath, progress, stopwatch, reporting.Token);
+            : ReportProgressAsync(rpc, partPath, progress, stopwatch, stallLimit, reporting.Token);
 
         try
         {
@@ -384,6 +438,7 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
         finally
         {
             _live.TryRemove(process, out _);
+            _helpers.Forget(process.Id);
 
             await reporting.CancelAsync().ConfigureAwait(false);
 
@@ -421,6 +476,11 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
     /// <param name="partPath">The file being written, or <see langword="null"/> for a torrent.</param>
     /// <param name="progress">Receiver for progress updates.</param>
     /// <param name="stopwatch">Elapsed time since the transfer began.</param>
+    /// <param name="stallLimit">
+    /// How long a stall is tolerated, or <see langword="null"/> when the transfer
+    /// has no deadline. Reported rather than enforced here: aria2 owns the
+    /// deadline, and this only says how much of it has elapsed.
+    /// </param>
     /// <param name="cancellationToken">Stops reporting when the transfer ends.</param>
     /// <remarks>
     /// <para>
@@ -444,6 +504,7 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
         string? partPath,
         IProgress<DownloadProgress> progress,
         Stopwatch stopwatch,
+        TimeSpan? stallLimit,
         CancellationToken cancellationToken)
     {
         var lastBytes = 0L;
@@ -451,6 +512,12 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
         var rate = 0d;
 
         var answered = false;
+
+        // When the transfer last moved. Kept here rather than derived from the
+        // rate alone, because aria2's averaged figure reaches zero a moment
+        // after the bytes stop and a countdown that reset on that would flicker.
+        var movedAt = TimeSpan.Zero;
+        var seenBytes = 0L;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -493,6 +560,14 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
 
                 if (status is not null)
                 {
+                    if (status.CompletedBytes > seenBytes)
+                    {
+                        seenBytes = status.CompletedBytes;
+                        movedAt = stopwatch.Elapsed;
+                    }
+
+                    var stalled = stopwatch.Elapsed - movedAt;
+
                     progress.Report(new DownloadProgress(
                         status.CompletedBytes,
                         status.TotalBytes,
@@ -500,7 +575,17 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
                         stopwatch.Elapsed)
                     {
                         Peers = status.Connections,
-                        Seeders = status.Seeders
+                        Seeders = status.Seeders,
+                        ResolvingMetadata = status.MetadataPending,
+
+                        // Reported with or without a deadline. A torrent has one
+                        // and an HTTP transfer does not, but "nothing has arrived
+                        // for a while" is worth saying either way — it was the
+                        // silence, not the missing countdown, that made a dead
+                        // transfer look identical to a slow one.
+                        StalledFor = stalled > StallThreshold ? stalled : null,
+
+                        StallLimit = stallLimit
                     });
 
                     continue;
@@ -679,6 +764,10 @@ public sealed class Aria2DownloadTransport : IDownloadTransport, IDisposable
         }
 
         _live.Clear();
+
+        // Closing the job kills anything still in it, which is the backstop for a
+        // child that ignored the kill above.
+        _job.Dispose();
     }
 
     /// <summary>Kills a process, ignoring failure.</summary>

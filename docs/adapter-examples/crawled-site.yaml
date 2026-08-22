@@ -1,0 +1,170 @@
+# A site that publishes pages, indexed by crawling them.
+#
+# The shortest useful crawler manifest is the `crawler.url` line below and
+# nothing else. Everything after it is optional, and every optional thing is
+# there to correct a guess the crawler got wrong on one particular site.
+#
+# Copy into %LOCALAPPDATA%\Don\adapters\, point it at a site you are entitled to
+# index, turn discovery on in Settings, and press Refresh.
+#
+# ---------------------------------------------------------------------------
+# What this crawls
+# ---------------------------------------------------------------------------
+#
+# Use it for sources where indexing and downloading are permitted: a project's
+# own release pages, a self-hosted repository, an open-source or freeware game
+# archive, a preservation collection, a shelf of files on your own server.
+#
+# robots.txt is honoured on every request and is not negotiable. A site that
+# disallows a path is not crawled there, the refusal is logged, and no setting
+# in this file overrides it — an extension point that could would not be an
+# extension point, it would be a way around a decision the rest of the launcher
+# takes seriously.
+#
+# ---------------------------------------------------------------------------
+# The two halves
+# ---------------------------------------------------------------------------
+#
+#   crawler:   what games are there            -> fills the Discover grid
+#   sourcing:  where can this one be fetched   -> runs when you press Install
+#
+# Either alone is a complete, useful manifest. A site can be worth indexing
+# without being somewhere anything is fetched from, and a site can supply
+# downloads for listings some other source found.
+
+key: example-site
+displayName: Example Site
+
+# Ships switched off, because example.test is not a real site and a shipped
+# manifest that is enabled would be attempted on every import. Point `crawler.url`
+# at something real and set this to true.
+enabled: false
+
+crawler:
+  # The only required line. The crawler starts here and infers the rest.
+  url: https://example.test/games/
+
+  # Everything below is a limit, and every limit has a finite default. A crawler
+  # follows links written by someone else, so "the site will stop eventually" is
+  # not a design: a paginator that always offers a next page and a category tree
+  # that reaches the whole domain are ordinary bugs on ordinary sites.
+  maxPages: 100
+  maxItems: 5000
+  concurrency: 1
+  delayMilliseconds: 1000
+  timeoutSeconds: 30
+  retries: 3
+
+  # Largest page the crawler will read. A page is a document, not a download —
+  # anything big enough to need the download stack should go through it.
+  maxPageBytes: 4194304
+
+  # Read each game's own page as well as the listing. On by default, because a
+  # listing carries a title and a link and little else. Turning it off makes an
+  # import dramatically faster and dramatically thinner, which is the right
+  # trade for a first look at an unfamiliar site.
+  readDetailPages: true
+
+  # The crawl is confined to the starting page's host unless you widen it here.
+  # Name a separate image or download host if the site uses one.
+  #
+  #   allowedHosts: ["cdn.example.test"]
+
+  # For a repository genuinely on your own network. Off everywhere else:
+  # crawled HTML is untrusted input, and a link is the cheapest way to ask a
+  # program to fetch something behind the firewall it happens to be inside.
+  #
+  #   allowPrivateHosts: true
+
+  # ---------------------------------------------------------------------------
+  # Selector overrides
+  # ---------------------------------------------------------------------------
+  #
+  # Ordinary CSS, evaluated the way a browser's querySelectorAll evaluates it —
+  # so you can work a selector out in the browser's own inspector and paste it
+  # here. Every one is optional; naming one corrects one guess without having to
+  # describe the whole page.
+  #
+  # Leave the block out entirely to let the crawler infer everything, which
+  # works on a site laid out the way most sites are laid out.
+  #
+  # selectors:
+  #   item: "article.game"        # the repeated block, one per game
+  #   detailLink: "h2 a"          # the link from a block to the game's page
+  #   nextPage: "a.next"          # the link to the following listing page
+  #   title: "h1"
+  #   description: ".description"
+  #   cover: "img.cover"
+  #   screenshots: ".gallery img"
+  #   date: "time"
+  #   genres: ".tags a"
+  #   developer: ".developer"
+  #   publisher: ".publisher"
+  #   platforms: ".platforms"
+
+# ---------------------------------------------------------------------------
+# Resolving a download
+# ---------------------------------------------------------------------------
+#
+# Delete this whole block for a catalogue-only source. With it, pressing Install
+# reads the game's page and takes the addresses off it.
+
+sourcing:
+  enabled: true
+
+  # direct-link     read the addresses off the game's own page
+  # mapped-field    use the address the catalogue already recorded
+  # external-script ask a program you nominate
+  strategy: direct-link
+
+  # lazy   resolve when someone presses Install   (default)
+  # eager  resolve during the import, for every game
+  #
+  # Lazy unless you have a reason. A catalogue of several thousand games costs
+  # several thousand extra page fetches to answer eagerly, to answer a question
+  # about the one game somebody eventually clicks — and the addresses would be
+  # stale by the time they did. Eager is worth it for a small shelf where
+  # knowing the size up front is useful; with direct-link it is nearly free,
+  # because the page is already open.
+  resolution: lazy
+
+  # Where these addresses sit in the merged mirror list; higher is tried first.
+  # Built-in adapters sit at 0, so the default of 100 puts a manifest ahead of
+  # them. Go negative to make this a last resort behind everything built in.
+  priority: 100
+
+  # Hosts the resolved addresses may point at. The page's own host is always
+  # allowed; name a separate file host here if the site uses one.
+  #
+  #   allowedHosts: ["files.example.test"]
+
+  # A magnet needs an external engine that may not be installed, so it is
+  # refused unless you say otherwise.
+  #
+  #   allowMagnet: true
+
+  # As with the crawler, every selector is optional. Without them the resolver
+  # looks for links that name an archive, and for a checksum and a size printed
+  # beside them.
+  #
+  # A checksum found here reaches the same verification the rest of the launcher
+  # uses: SHA-256 is preferred, then SHA-1, then MD5. Nothing is ever invented —
+  # a page that publishes no checksum produces a download with none.
+  #
+  # selectors:
+  #   downloadLink: "a.download"
+  #   checksum: ".sha256"
+  #   sha256: ".sha256"
+  #   sha1: ".sha1"
+  #   md5: ".md5"
+  #   size: ".filesize"
+  #   fileName: ".filename"
+
+  # For strategy: external-script. The program is handed a JSON description of
+  # the listing on standard input and returns JSON candidates on standard
+  # output; see docs/generic-crawler.md for the contract.
+  #
+  # script:
+  #   command: python
+  #   args: [resolver.py]
+  #   timeoutSeconds: 30

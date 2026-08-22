@@ -171,6 +171,7 @@ public sealed class DownloadTransportTests
             settings,
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         // Off by default: starting an external process is a decision worth
@@ -197,6 +198,7 @@ public sealed class DownloadTransportTests
             new StubSettings(),
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         Assert.True(transport.Capabilities.HasFlag(TransportCapabilities.Http));
@@ -275,6 +277,7 @@ public sealed class DownloadTransportTests
             settings,
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         var part = Path.Combine(temp.Path, "game.zip.part");
@@ -341,6 +344,7 @@ public sealed class DownloadTransportTests
             settings,
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         // Collected synchronously rather than through Progress<T>, whose callback
@@ -398,6 +402,7 @@ public sealed class DownloadTransportTests
             settings,
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         var part = Path.Combine(temp.Path, "game.zip.part");
@@ -468,6 +473,7 @@ public sealed class DownloadTransportTests
             settings,
             host.Resolve<IExternalToolLocator>(),
             host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            host.Resolve<DownloadHelperRegistry>(),
             NullLogger<Aria2DownloadTransport>.Instance);
 
         var transfer = transport.TransferAsync(new TransportRequest
@@ -500,6 +506,55 @@ public sealed class DownloadTransportTests
     /// </summary>
     /// <param name="argvPath">File the stub writes its arguments to.</param>
     /// <returns>The port the transport chose.</returns>
+    [Fact]
+    public async Task A_quiet_http_transfer_is_reported_as_stalled_rather_than_left_blank()
+    {
+        // The symptom this fixes: the copy loop only reported after a read
+        // returned bytes, so a server that went quiet left the row frozen on
+        // whatever it last said. A watchdog on its own clock is the only way the
+        // silence gets reported at all.
+        await using var server = await LoopbackFileServer.StartAsync();
+
+        // Small chunks with a gap far longer than the threshold, so the transfer
+        // is genuinely quiet rather than merely slow.
+        server.AddFile("game.zip", new byte[8 * 1024]);
+        server.ChunkSize = 1024;
+        server.ChunkDelay = TimeSpan.FromMilliseconds(900);
+
+        using var directory = new TempDirectory();
+        using var host = new TestAppHost();
+
+        var transport = new HttpDownloadTransport(
+            host.Resolve<System.Net.Http.IHttpClientFactory>(),
+            NullLogger<HttpDownloadTransport>.Instance,
+            stallThreshold: TimeSpan.FromMilliseconds(300));
+
+        var reports = new List<DownloadProgress>();
+        var progress = new Progress<DownloadProgress>(reports.Add);
+
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
+        await transport.TransferAsync(
+            new TransportRequest
+            {
+                Url = server.FileUrl("game.zip"),
+                PartPath = Path.Combine(directory.Path, "game.zip.part"),
+                DestinationDirectory = directory.Path,
+                AllowResume = false
+            },
+            progress,
+            cancellation.Token);
+
+        // Progress is reported to a Progress<T>, which marshals — give the posted
+        // callbacks a moment to land before reading them.
+        await Task.Delay(200, cancellation.Token);
+
+        Assert.Contains(reports, report => report.StalledFor is not null);
+
+        // And with no deadline of its own, this transport must not invent one.
+        Assert.All(reports, report => Assert.Null(report.StallLimit));
+    }
+
     private static async Task<int> ReadPortAsync(string argvPath)
     {
         for (var attempt = 0; attempt < 100; attempt++)

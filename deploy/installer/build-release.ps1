@@ -28,8 +28,21 @@
 .PARAMETER OutputRoot
     Where to write the release. Defaults to deploy\installer\output.
 
+.PARAMETER RelayUrl
+    Relay address to configure the installed launcher with, so whoever receives
+    this archive does not have to be told one.
+
+.PARAMETER CatalogUrl
+    Shared catalogue feed to configure. Also switches discovery on, because the
+    catalogue is not read while it is off and someone handed a pre-configured
+    launcher has no reason to guess that a second switch exists.
+
 .EXAMPLE
     .\build-release.ps1
+
+.EXAMPLE
+    .\build-release.ps1 -RelayUrl https://don.example.com -CatalogUrl https://don.example.com/feed/catalog.json
+    A release that is already pointed at a server before it is opened.
 
 .EXAMPLE
     .\build-release.ps1 -Version 1.2.0 -SkipInstaller
@@ -38,6 +51,8 @@
 param(
     [string] $Version,
     [string] $OutputRoot,
+    [string] $RelayUrl,
+    [string] $CatalogUrl,
     [switch] $SkipPublish,
     [switch] $SkipInstaller
 )
@@ -194,13 +209,86 @@ foreach ($script in @('Install-Don.ps1', 'Uninstall-Don.ps1', 'Install.cmd', 'Un
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $script) -Destination $stageDir
 }
 
+# ------------------------------------------------------------- provisioning
+
+# What a fresh install starts out with. Copied into the library on first
+# install only, so this decides what a new copy begins with and can never
+# reconfigure one somebody is already using.
+$provisionSource = Join-Path $PSScriptRoot 'provision'
+$provisionStage = Join-Path $stageDir 'provision'
+
+$adapterSource = Join-Path $provisionSource 'adapters'
+
+if (Test-Path -LiteralPath $adapterSource) {
+    $adapters = @(Get-ChildItem -LiteralPath $adapterSource -File |
+        Where-Object { $_.Extension -in @('.yaml', '.yml', '.json') })
+
+    if ($adapters.Count -gt 0) {
+        $adapterStage = Join-Path $provisionStage 'adapters'
+        $null = New-Item -ItemType Directory -Path $adapterStage -Force
+
+        foreach ($adapter in $adapters) {
+            Copy-Item -LiteralPath $adapter.FullName -Destination $adapterStage
+        }
+
+        Write-Host "  $($adapters.Count) adapter manifest(s): $(($adapters | ForEach-Object { $_.Name }) -join ', ')"
+    }
+}
+
+if ($RelayUrl -or $CatalogUrl) {
+    # An ordinary AppSettings document. The launcher reads it as its settings
+    # file on first run and rewrites it from then on, so nothing here is
+    # enforced afterwards — it is a starting point for a person, not a policy
+    # over them.
+    $defaults = [ordered]@{}
+
+    if ($RelayUrl) {
+        $defaults['relayUrl'] = $RelayUrl.Trim()
+    }
+
+    if ($CatalogUrl) {
+        $defaults['sharedCatalogUrl'] = $CatalogUrl.Trim()
+
+        # Only alongside a catalogue. Discovery is off by default on purpose,
+        # and that default should stand for anyone who did not deliberately
+        # ship one.
+        $defaults['discoveryEnabled'] = $true
+    }
+
+    $null = New-Item -ItemType Directory -Path $provisionStage -Force
+
+    [System.IO.File]::WriteAllText(
+        (Join-Path $provisionStage 'settings.defaults.json'),
+        ($defaults | ConvertTo-Json),
+        (New-Object System.Text.UTF8Encoding $false))
+
+    Write-Host "  configured: $(($defaults.Keys | Where-Object { $_ -ne 'discoveryEnabled' }) -join ', ')"
+}
+
+$configured = if ($RelayUrl -or $CatalogUrl) {
+    @"
+
+
+This copy is already configured
+-------------------------------
+It comes pointed at:
+$(if ($RelayUrl)   { "`n    friends and sync   $RelayUrl" })$(if ($CatalogUrl) { "`n    shared catalogue   $CatalogUrl" })
+
+You do not have to enter those. They are applied on the first install only, so
+if you have used $AppName before, your own settings are kept and nothing here
+overrides them. Change them any time under Settings.
+"@
+} else {
+    ''
+}
+
 $readme = @"
 $AppName $Version
 ================
 
 To install
 ----------
-Double-click Install.cmd.
+Double-click Install.cmd.$configured
 
 It installs to your own user profile, so Windows will not ask for an
 administrator password. $AppName appears in the Start Menu, on the desktop, and

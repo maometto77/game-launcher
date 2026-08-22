@@ -591,7 +591,7 @@ value.
 
 ### Client database
 
-Location: `%LOCALAPPDATA%\GameLauncher\gamelauncher.db`. WAL mode, foreign keys
+Location: `%LOCALAPPDATA%\Don\gamelauncher.db`. WAL mode, foreign keys
 **ON** — per-connection, because SQLite defaults them off, so
 `SqliteConnectionFactory` sets it every time or the cascades silently do nothing.
 
@@ -1477,7 +1477,7 @@ manual registration step and no way to enter a friend code by hand.
 
 ### Where runtime state lives
 
-Everything is under `%LOCALAPPDATA%\GameLauncher`. Nothing is written next to the
+Everything is under `%LOCALAPPDATA%\Don`. Nothing is written next to the
 executable, so the app runs from Program Files without elevation.
 
 | Path | Contents |
@@ -1498,7 +1498,7 @@ Tests never touch this — `TestAppHost` redirects `AppPaths` to a temp folder.
 > unrecoverable once gone — the relay stores a hash, not the token. Back the
 > folder up first if the data matters.
 
-Delete `%LOCALAPPDATA%\GameLauncher`. The next start recreates it and migrates a
+Delete `%LOCALAPPDATA%\Don`. The next start recreates it and migrates a
 fresh database from v0 to v6.
 
 To reset only the relay, stop it and delete its `.db` file — but note this gives

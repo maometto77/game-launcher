@@ -194,6 +194,28 @@ public sealed class ScriptableSourcingTests
     }
 
     [Fact]
+    public void A_feed_and_a_page_read_a_printed_digest_the_same_way()
+    {
+        // One rule, in one place, for every source that can carry a checksum:
+        // they all feed the same verification, so disagreeing about what counts
+        // as a digest would mean the same published value verifying a download
+        // from one source and failing it from another.
+        const string Printed = "sha1:DA39A3EE5E6B4B0D3255BFEF95601890AFD80709  doom.zip";
+
+        var payload = FeedReader.Read(
+            $$"""{ "files": [ { "url": "https://a.test/doom.zip", "sha1": "{{Printed}}" } ] }""",
+            FeedFormat.Json);
+
+        var mapped = Assert.Single(FeedDownloadMapper.Map(payload, JsonManifest(), "lst_1"));
+
+        // An algorithm prefix, mixed case and the trailing file name sha1sum
+        // prints are all unwrapped rather than being grounds for discarding a
+        // perfectly good checksum.
+        Assert.Equal(HexDigest.Clean(Printed), mapped.Sha1);
+        Assert.Equal("da39a3ee5e6b4b0d3255bfef95601890afd80709", mapped.Sha1);
+    }
+
+    [Fact]
     public void Feed_order_becomes_mirror_order()
     {
         var payload = FeedReader.Read(
@@ -487,7 +509,7 @@ public sealed class ScriptableSourcingTests
     {
         // The whole path, as it runs on a user's machine: the captured payload
         // through the real hook runner into the real mapper.
-        if (Interpreter() is not { } python)
+        if (PythonInterpreter.Command is not { } python)
         {
             // No Python on this machine, so there is nothing to exercise. The
             // manifest and mapping halves are covered above without it.
@@ -532,7 +554,7 @@ public sealed class ScriptableSourcingTests
         // scraper that looks for it among the originals never finds one.
         // archive-downloadable-item.json happens to say 'original', which is
         // why this case needs a payload of its own rather than that fixture.
-        if (Interpreter() is not { } python)
+        if (PythonInterpreter.Command is not { } python)
         {
             return;
         }
@@ -573,7 +595,7 @@ public sealed class ScriptableSourcingTests
     [Fact]
     public async Task The_archive_scraper_refuses_a_restricted_item()
     {
-        if (Interpreter() is not { } python)
+        if (PythonInterpreter.Command is not { } python)
         {
             return;
         }
@@ -943,53 +965,6 @@ public sealed class ScriptableSourcingTests
     /// <returns>Its contents.</returns>
     private static string Fixture(string name) =>
         File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Discovery", "Fixtures", name));
-
-    /// <summary>
-    /// Finds a Python interpreter, or <see langword="null"/> when there is none.
-    /// </summary>
-    /// <returns>The command to run, or <see langword="null"/>.</returns>
-    /// <remarks>
-    /// The hook contract is a pipe, so the launcher needs no interpreter and the
-    /// test suite must not require one either. The tests that would run a script
-    /// stand down when there is nothing to run them with, rather than failing on
-    /// a machine that is configured exactly as intended.
-    /// </remarks>
-    private static string? Interpreter()
-    {
-        foreach (var candidate in new[] { "python", "python3", "py" })
-        {
-            try
-            {
-                using var probe = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = candidate,
-                    Arguments = "--version",
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                });
-
-                if (probe is null)
-                {
-                    continue;
-                }
-
-                probe.WaitForExit(10_000);
-
-                if (probe.HasExited && probe.ExitCode == 0)
-                {
-                    return candidate;
-                }
-            }
-            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
-            {
-                // Not on PATH. Try the next spelling.
-            }
-        }
-
-        return null;
-    }
 
     /// <summary>
     /// Loads the Archive example, which ships disabled, as an enabled manifest.

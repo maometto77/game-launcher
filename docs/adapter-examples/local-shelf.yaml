@@ -1,6 +1,6 @@
 # A catalogue held entirely on this machine — no server, no network.
 #
-# Copy this file and shelf.json into %LOCALAPPDATA%\GameLauncher\adapters\.
+# Copy this file and shelf.json into %LOCALAPPDATA%\Don\adapters\.
 #
 # 'request.url' has no scheme, so it names a file beside this manifest. That is
 # the whole mechanism: a JSON file you maintain by hand, read when a listing

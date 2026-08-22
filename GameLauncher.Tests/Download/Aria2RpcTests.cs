@@ -1,3 +1,4 @@
+using GameLauncher.Desktop.Infrastructure;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
@@ -250,6 +251,226 @@ public sealed class Aria2RpcTests
         });
 
         Assert.Equal(expected, row.PeersText);
+    }
+
+    /// <summary>A magnet that has not found the torrent metadata yet.</summary>
+    /// <remarks>
+    /// aria2 omits <c>bittorrent.info</c> until a peer supplies the info
+    /// dictionary, and reports zero for the size and rate meanwhile. This body is
+    /// the shape of the phase that used to be indistinguishable from a hang.
+    /// </remarks>
+    private const string MagnetResolving =
+        """
+        {"id":"gl","jsonrpc":"2.0","result":[{
+          "gid":"7a1b2c3d4e5f6071",
+          "completedLength":"0",
+          "totalLength":"0",
+          "downloadSpeed":"0",
+          "connections":"0",
+          "numSeeders":"0",
+          "bittorrent":{"announceList":[["udp://tracker.example.test:6969/announce"]],"mode":"single"}
+        }]}
+        """;
+
+    /// <summary>The same magnet once the metadata has arrived.</summary>
+    private const string MagnetResolved =
+        """
+        {"id":"gl","jsonrpc":"2.0","result":[{
+          "gid":"7a1b2c3d4e5f6071",
+          "completedLength":"1048576",
+          "totalLength":"343597383",
+          "downloadSpeed":"524288",
+          "connections":"12",
+          "numSeeders":"3",
+          "bittorrent":{"info":{"name":"doom.iso"},"mode":"single"}
+        }]}
+        """;
+
+    [Fact]
+    public async Task A_magnet_still_finding_the_metadata_says_so()
+    {
+        await using var server = await LoopbackRpcServer.StartAsync();
+        server.ResponseBody = MagnetResolving;
+
+        var status = await Client(server).TellActiveAsync();
+
+        Assert.NotNull(status);
+        Assert.True(status.IsTorrent);
+
+        // The distinction the whole change rests on. Without it this status is
+        // byte-for-byte what a dead transfer reports.
+        Assert.True(status.MetadataPending);
+
+        Assert.Null(status.TotalBytes);
+        Assert.Equal(0, status.CompletedBytes);
+        Assert.Equal(0, status.Connections);
+    }
+
+    [Fact]
+    public async Task A_magnet_that_resolved_is_an_ordinary_torrent_again()
+    {
+        await using var server = await LoopbackRpcServer.StartAsync();
+        server.ResponseBody = MagnetResolved;
+
+        var status = await Client(server).TellActiveAsync();
+
+        Assert.NotNull(status);
+        Assert.True(status.IsTorrent);
+        Assert.False(status.MetadataPending);
+        Assert.Equal(343597383, status.TotalBytes);
+        Assert.Equal(3, status.Seeders);
+    }
+
+    [Fact]
+    public async Task An_http_transfer_is_not_mistaken_for_a_pending_torrent()
+    {
+        // No bittorrent member and no seeder count. Reporting MetadataPending
+        // here would put "Finding peers" on a plain web download.
+        await using var server = await LoopbackRpcServer.StartAsync();
+
+        server.ResponseBody =
+            """
+            {"id":"gl","jsonrpc":"2.0","result":[{
+              "gid":"a1","completedLength":"1024","totalLength":"4096",
+              "downloadSpeed":"512","connections":"8"
+            }]}
+            """;
+
+        var status = await Client(server).TellActiveAsync();
+
+        Assert.NotNull(status);
+        Assert.False(status.IsTorrent);
+        Assert.False(status.MetadataPending);
+    }
+
+    [Fact]
+    public void A_row_resolving_metadata_does_not_claim_to_be_downloading()
+    {
+        var row = new DownloadItemViewModel(new DownloadJob
+        {
+            JobId = "job_1",
+            ListingId = "lst_1",
+            Title = "Doom",
+            Phase = DownloadPhase.Downloading,
+            ResolvingMetadata = true,
+            Peers = 0
+        });
+
+        Assert.Equal("Finding peers", row.PhaseText);
+
+        // And the size slot explains the wait rather than showing nothing.
+        Assert.Equal("Reading torrent details…", row.SizeText);
+    }
+
+    [Fact]
+    public void A_stalled_row_shows_how_long_the_engine_will_keep_waiting()
+    {
+        // A wait with no visible end reads as a hang and gets cancelled; the
+        // same wait with a countdown reads as patience.
+        var row = new DownloadItemViewModel(new DownloadJob
+        {
+            JobId = "job_1",
+            ListingId = "lst_1",
+            Title = "Doom",
+            Phase = DownloadPhase.Downloading,
+            StalledFor = TimeSpan.FromMinutes(1),
+            StallLimit = TimeSpan.FromMinutes(5)
+        });
+
+        Assert.Equal("waiting, 4m 0s left", row.EtaText);
+    }
+
+    [Fact]
+    public void A_row_with_nothing_to_time_says_nothing()
+    {
+        // An ordinary download that simply has no estimate yet must not grow a
+        // countdown out of nowhere.
+        var row = new DownloadItemViewModel(new DownloadJob
+        {
+            JobId = "job_1",
+            ListingId = "lst_1",
+            Title = "Doom",
+            Phase = DownloadPhase.Downloading
+        });
+
+        Assert.Equal(string.Empty, row.EtaText);
+        Assert.Equal("Downloading", row.PhaseText);
+    }
+
+    [Fact]
+    public void A_stalled_row_without_a_deadline_says_how_long_it_has_been_quiet()
+    {
+        // An HTTP transfer waits as long as the request allows rather than
+        // abandoning a quiet connection on a deadline of its own, so there is no
+        // countdown to show — but the silence itself is the useful fact, and this
+        // slot used to be blank for exactly the transfer people were staring at.
+        var row = new DownloadItemViewModel(new DownloadJob
+        {
+            JobId = "job_1",
+            ListingId = "lst_1",
+            Title = "Doom",
+            Phase = DownloadPhase.Downloading,
+            StalledFor = TimeSpan.FromSeconds(42)
+        });
+
+        Assert.Equal("stalled 42s", row.EtaText);
+    }
+
+    [Fact]
+    public void A_job_object_contains_a_child_process()
+    {
+        // The point of the job is that the kernel enforces it, so the test has to
+        // watch a real process die rather than check a flag.
+        using var job = new ChildProcessJob();
+
+        Assert.True(job.IsEnforced);
+
+        using var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = "/c pause",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(child);
+        Assert.True(job.Assign(child!));
+        Assert.False(child!.HasExited);
+
+        // Closing the job is what a killed launcher's handle closing does.
+        job.Dispose();
+
+        Assert.True(child.WaitForExit(10_000), "the job did not kill its child");
+    }
+
+    [Fact]
+    public void An_unassigned_process_outlives_the_job()
+    {
+        // The control for the test above: without assignment the child survives,
+        // which is precisely the leak that stranded an aria2c downloading
+        // invisibly for the best part of an hour.
+        using var job = new ChildProcessJob();
+
+        using var child = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "cmd.exe",
+            Arguments = "/c pause",
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        });
+
+        Assert.NotNull(child);
+
+        job.Dispose();
+
+        Assert.False(child!.WaitForExit(1_000));
+
+        child.Kill(entireProcessTree: true);
+        child.WaitForExit(10_000);
     }
 
     private static Aria2RpcClient Client(LoopbackRpcServer server) =>

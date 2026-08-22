@@ -88,6 +88,35 @@ public sealed record DownloadProgress(
     /// </summary>
     public int? Seeders { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether a torrent is still fetching its metadata.
+    /// </summary>
+    /// <remarks>
+    /// The phase a magnet link starts in, where there is no total size, no
+    /// progress and no rate because the file names are not known yet. Reported
+    /// separately because it looks exactly like a stalled transfer otherwise,
+    /// and the two want very different reactions from whoever is watching.
+    /// </remarks>
+    public bool ResolvingMetadata { get; init; }
+
+    /// <summary>
+    /// Gets how long nothing has been transferred, or <see langword="null"/> when
+    /// something is moving or the transport does not track it.
+    /// </summary>
+    public TimeSpan? StalledFor { get; init; }
+
+    /// <summary>
+    /// Gets how long a stall is tolerated before the transport gives up, or
+    /// <see langword="null"/> when it waits indefinitely.
+    /// </summary>
+    /// <remarks>
+    /// Shown alongside <see cref="StalledFor"/> so a wait has a visible end. A
+    /// progress line that says nothing is happening, without saying for how much
+    /// longer it will keep not happening, is what makes people kill a transfer
+    /// that was about to start.
+    /// </remarks>
+    public TimeSpan? StallLimit { get; init; }
+
     /// <summary>Gets completion as a fraction, or <see langword="null"/> when the total is unknown.</summary>
     public double? Fraction =>
         TotalBytes is > 0 ? Math.Clamp((double)BytesReceived / TotalBytes.Value, 0d, 1d) : null;

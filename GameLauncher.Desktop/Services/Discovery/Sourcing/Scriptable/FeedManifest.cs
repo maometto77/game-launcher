@@ -387,8 +387,47 @@ public sealed class FeedManifest
     /// </remarks>
     public FeedCatalog? Catalog { get; set; }
 
-    /// <summary>Gets a value indicating whether this manifest fills the catalogue.</summary>
+    /// <summary>
+    /// How this manifest crawls a site's pages, when it does.
+    /// </summary>
+    /// <remarks>
+    /// The alternative to <see cref="Catalog"/> for a site that publishes pages
+    /// rather than a feed, which is most of them. The two are mutually
+    /// exclusive in practice — a manifest declaring both would be describing the
+    /// same catalogue twice — and the crawler is preferred when both appear.
+    /// </remarks>
+    public FeedCrawler? Crawler { get; set; }
+
+    /// <summary>
+    /// How this manifest resolves a listing to a download, when it does.
+    /// </summary>
+    public FeedSourcing? Sourcing { get; set; }
+
+    /// <summary>Gets a value indicating whether this manifest is a catalogue feed.</summary>
+    /// <remarks>
+    /// Strictly the feed half. A crawler fills the catalogue too, but through a
+    /// different source that fetches pages rather than a payload — and this
+    /// property is what the feed reader iterates, so widening it to mean "fills
+    /// the catalogue somehow" hands it manifests with no <c>catalog</c> section
+    /// to read. Ask <see cref="ProvidesCrawler"/> for the other half.
+    /// </remarks>
     public bool ProvidesCatalog => Catalog is { Enabled: true };
+
+    /// <summary>Gets a value indicating whether this manifest crawls a site.</summary>
+    public bool ProvidesCrawler => Crawler is { Enabled: true } && !string.IsNullOrWhiteSpace(Crawler.Url);
+
+    /// <summary>Gets a value indicating whether this manifest resolves downloads.</summary>
+    public bool ProvidesSourcing => Sourcing is { Enabled: true };
+
+    /// <summary>
+    /// Gets the priority this manifest's addresses rank at.
+    /// </summary>
+    /// <remarks>
+    /// The <c>sourcing</c> section's own number when it has one, so a manifest
+    /// can rank its downloads separately from the legacy top-level
+    /// <see cref="Priority"/> that the feed-mapping path uses.
+    /// </remarks>
+    public int SourcingPriority => Sourcing?.Priority ?? Priority;
 
     /// <summary>File this manifest was read from, for diagnostics.</summary>
     public string SourcePath { get; set; } = string.Empty;
@@ -411,16 +450,16 @@ public sealed class FeedManifest
             problems.Add("'key' is required.");
         }
 
-        // A manifest may fill the catalogue, supply downloads, or both, so the
-        // sourcing half is only required of a file that claims to do the second.
-        // Demanding it of a catalogue-only feed would mean writing a 'map.url'
-        // that nothing ever reads.
-        var providesSourcing =
-            Match.Hosts.Count > 0 ||
+        // The legacy feed-mapping path, recognised by the fields only it uses.
+        // 'match' is deliberately not one of them: the newer 'sourcing' section
+        // needs it too, to say which hosts it claims, and treating its presence
+        // as intent to use the old path made a perfectly good manifest fail with
+        // a complaint about a 'map.url' it had no reason to have.
+        var usesFeedMapping =
             !string.IsNullOrWhiteSpace(Request.Url) ||
             !string.IsNullOrWhiteSpace(Map.Url);
 
-        if (providesSourcing)
+        if (usesFeedMapping)
         {
             if (Match.Hosts.Count == 0)
             {
@@ -437,10 +476,19 @@ public sealed class FeedManifest
                 problems.Add("'map.url' is required — a feed with no address supplies nothing.");
             }
         }
-        else if (Catalog is null)
+        else if (Match.Hosts.Count > 0 && Catalog is null && Crawler is null && Sourcing is null)
+        {
+            // 'match' on its own claims addresses and then does nothing with
+            // them, which is a file that looks like it works and does not.
+            problems.Add(
+                "'match' names hosts but nothing resolves them: add a 'sourcing' section, " +
+                "or a 'request'/'map' pair for the older feed-mapping path.");
+        }
+        else if (Match.Hosts.Count == 0 && Catalog is null && Crawler is null && Sourcing is null)
         {
             problems.Add(
-                "a manifest must do something: give it a 'catalog' section, a sourcing 'match'/'request'/'map', or both.");
+                "a manifest must do something: give it a 'crawler' or 'catalog' section, " +
+                "a 'sourcing' section, a legacy 'match'/'request'/'map', or a combination.");
         }
 
         if (Transform is { } transform && string.IsNullOrWhiteSpace(transform.Command))
@@ -451,6 +499,16 @@ public sealed class FeedManifest
         if (Catalog is { } catalog)
         {
             problems.AddRange(catalog.Validate());
+        }
+
+        if (Crawler is { } crawler)
+        {
+            problems.AddRange(crawler.Validate());
+        }
+
+        if (Sourcing is { } sourcing)
+        {
+            problems.AddRange(sourcing.Validate());
         }
 
         return problems;

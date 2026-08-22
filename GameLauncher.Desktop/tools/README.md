@@ -61,7 +61,7 @@ generic.
 1. The path configured in Settings, if there is one.
 2. Beside the executable.
 3. `tools/` beside the executable — where this folder lands.
-4. `%LOCALAPPDATA%\GameLauncher\tools\` — for adding a tool without write access
+4. `%LOCALAPPDATA%\Don\tools\` — for adding a tool without write access
    to Program Files.
 5. `PATH`.
 

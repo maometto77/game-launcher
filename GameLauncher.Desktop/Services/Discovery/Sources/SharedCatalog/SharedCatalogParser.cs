@@ -34,8 +34,6 @@ public static class SharedCatalogParser
     private static readonly string[] AllowedSchemes = [Uri.UriSchemeHttp, Uri.UriSchemeHttps];
 
     /// <summary>Lengths of the hex digests the download path can verify.</summary>
-    private static readonly int[] DigestLengths = [32, 40, 64, 128];
-
     /// <summary>
     /// Reads a feed document.
     /// </summary>
@@ -251,9 +249,9 @@ public static class SharedCatalogParser
                 Url = url,
                 FileName = String(element, "fileName") ?? FileNameFrom(url),
                 SizeBytes = Int64(element, "size"),
-                Sha256 = Digest(element, "sha256"),
-                Sha1 = Digest(element, "sha1"),
-                Md5 = Digest(element, "md5"),
+                Sha256 = DigestOf(element, "sha256"),
+                Sha1 = DigestOf(element, "sha1"),
+                Md5 = DigestOf(element, "md5"),
                 Format = String(element, "format") ?? FormatFrom(url),
                 Kind = DownloadKindFrom(String(element, "kind")),
 
@@ -354,38 +352,12 @@ public static class SharedCatalogParser
         return AllowedSchemes.Contains(resolved.Scheme, StringComparer.OrdinalIgnoreCase) ? resolved : null;
     }
 
-    /// <summary>Reads a hex digest, ignoring any prefix and anything malformed.</summary>
+    /// <summary>Reads a hex digest, dropping anything that is not one.</summary>
     /// <param name="element">Element holding the member.</param>
     /// <param name="name">Member name.</param>
     /// <returns>The lowercase digest, or <see langword="null"/>.</returns>
-    /// <remarks>
-    /// A digest that is not one of the recognised lengths is dropped rather than
-    /// passed on. Carried forward, it would fail verification on a file that was
-    /// downloaded perfectly, and the user would be told their download was
-    /// corrupt when the feed was simply wrong.
-    /// </remarks>
-    private static string? Digest(JsonElement element, string name)
-    {
-        var value = String(element, name);
-
-        if (value is null)
-        {
-            return null;
-        }
-
-        // Some publishers write "sha256:abc..."; the prefix is redundant next to
-        // a member that already says which algorithm this is.
-        var separator = value.IndexOf(':', StringComparison.Ordinal);
-
-        if (separator >= 0)
-        {
-            value = value[(separator + 1)..];
-        }
-
-        return DigestLengths.Contains(value.Length) && value.All(Uri.IsHexDigit)
-            ? value.ToLowerInvariant()
-            : null;
-    }
+    private static string? DigestOf(JsonElement element, string name) =>
+        HexDigest.Clean(String(element, name));
 
     /// <summary>Derives a file name from an address.</summary>
     /// <param name="url">The address.</param>

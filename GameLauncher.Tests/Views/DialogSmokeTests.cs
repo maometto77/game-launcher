@@ -561,7 +561,88 @@ public sealed class DialogSmokeTests
 
         Assert.NotEmpty(viewModel.FriendCode);
 
+        // The source-status rows have to be present, or their template is never
+        // expanded and a broken resource inside it stays invisible. Every
+        // registered source produces one, so this is populated by construction.
+        Assert.NotEmpty(viewModel.CatalogSources);
+
         _wpf.Invoke(() => RealisePage(viewModel));
+    }
+
+    [Fact]
+    public async Task SettingsPage_realises_every_source_state()
+    {
+        using var host = new TestAppHost();
+
+        await host.Resolve<ISettingsService>().LoadAsync();
+
+        var viewModel = host.Resolve<SettingsViewModel>();
+        await viewModel.OnNavigatedToAsync();
+
+        // Available, unavailable and needs-attention are three branches of one
+        // template's triggers, and only the middle one occurs by default.
+        var sources = viewModel.CatalogSources.ToList();
+
+        viewModel.CatalogSources.Clear();
+
+        viewModel.CatalogSources.Add(new CatalogSourceStatusViewModel(
+            new StubCatalogSource("ready", available: true), null));
+
+        viewModel.CatalogSources.Add(new CatalogSourceStatusViewModel(
+            new StubCatalogSource("off", available: false), null));
+
+        viewModel.CatalogSources.Add(new CatalogSourceStatusViewModel(
+            new StubCatalogSource("stale", available: true),
+            new CatalogImportRun
+            {
+                RunId = 1,
+                SourceKey = "stale",
+                StartedAt = DateTimeOffset.Now.AddHours(-3),
+                CompletedAt = DateTimeOffset.Now.AddHours(-3),
+                ItemsSeen = 300,
+                ItemsChanged = 0,
+                ListingsAdded = 0
+            }));
+
+        Assert.Contains(viewModel.CatalogSources, source => source.IsAvailable);
+        Assert.Contains(viewModel.CatalogSources, source => !source.IsAvailable);
+        Assert.Contains(viewModel.CatalogSources, source => source.NeedsAttention);
+
+        _wpf.Invoke(() => RealisePage(viewModel));
+
+        Assert.NotEmpty(sources);
+    }
+
+    /// <summary>A catalogue source that exists only to carry a name and a state.</summary>
+    /// <param name="key">Its dispatch key.</param>
+    /// <param name="available">Whether it reports itself usable.</param>
+    private sealed class StubCatalogSource(string key, bool available)
+        : GameLauncher.Desktop.Services.Discovery.ICatalogSource
+    {
+        public string Key => key;
+
+        public string DisplayName => key;
+
+        public int Rank => 0;
+
+        public GameLauncher.Desktop.Services.Discovery.SourceThrottle Throttle =>
+            GameLauncher.Desktop.Services.Discovery.SourceThrottle.Polite;
+
+        public bool IsAvailable => available;
+
+        public async IAsyncEnumerable<GameLauncher.Desktop.Services.Discovery.SourceListingRef> EnumerateAsync(
+            GameLauncher.Desktop.Services.Discovery.SourceEnumerationOptions options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation]
+            CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public Task<GameLauncher.Desktop.Services.Discovery.SourceListing?> FetchAsync(
+            GameLauncher.Desktop.Services.Discovery.SourceListingRef reference,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<GameLauncher.Desktop.Services.Discovery.SourceListing?>(null);
     }
 
     [Fact]

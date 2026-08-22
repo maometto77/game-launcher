@@ -33,7 +33,21 @@ public sealed partial class DownloadItemViewModel : ObservableObject
     public string Title => Job.Title;
 
     /// <summary>Gets the phase as a word a person recognises.</summary>
-    public string PhaseText => Job.Phase switch
+    /// <remarks>
+    /// A magnet spends its first stretch finding a peer that can supply the
+    /// torrent metadata, during which "Downloading" is a promise the row is not
+    /// yet keeping — and looks like a fault when the bar never moves.
+    /// </remarks>
+    public string PhaseText => Job switch
+    {
+        { Phase: DownloadPhase.Downloading, ResolvingMetadata: true } => "Finding peers",
+        _ => DescribePhase(Job.Phase)
+    };
+
+    /// <summary>Names a phase.</summary>
+    /// <param name="phase">The phase to name.</param>
+    /// <returns>A word a person recognises.</returns>
+    private static string DescribePhase(DownloadPhase phase) => phase switch
     {
         DownloadPhase.Queued => "Queued",
         DownloadPhase.Paused => "Paused",
@@ -59,9 +73,15 @@ public sealed partial class DownloadItemViewModel : ObservableObject
     public bool IsIndeterminate => Job.Fraction is null && Job.IsActive;
 
     /// <summary>Gets the transferred and total size, as text.</summary>
-    public string SizeText => Job.TotalBytes is > 0
-        ? $"{Format(Job.BytesReceived)} of {Format(Job.TotalBytes.Value)}"
-        : Job.BytesReceived > 0 ? Format(Job.BytesReceived) : string.Empty;
+    /// <remarks>
+    /// A torrent has no size until its metadata arrives, so the slot says what
+    /// is being waited for rather than showing a total of nothing.
+    /// </remarks>
+    public string SizeText => Job.ResolvingMetadata
+        ? "Reading torrent details…"
+        : Job.TotalBytes is > 0
+            ? $"{Format(Job.BytesReceived)} of {Format(Job.TotalBytes.Value)}"
+            : Job.BytesReceived > 0 ? Format(Job.BytesReceived) : string.Empty;
 
     /// <summary>Gets the current rate, as text.</summary>
     public string SpeedText =>
@@ -70,13 +90,45 @@ public sealed partial class DownloadItemViewModel : ObservableObject
             : string.Empty;
 
     /// <summary>Gets the estimated time remaining, as text.</summary>
+    /// <remarks>
+    /// When nothing is moving there is no estimate to give, and the slot carries
+    /// the engine's own deadline instead. A wait with a visible end reads as
+    /// patience; the same wait without one reads as a hang, and gets cancelled.
+    /// </remarks>
     public string EtaText => Job.EstimatedRemaining is { } remaining
         ? remaining.TotalHours >= 1
             ? $"{(int)remaining.TotalHours}h {remaining.Minutes}m left"
             : remaining.TotalMinutes >= 1
                 ? $"{(int)remaining.TotalMinutes}m {remaining.Seconds}s left"
                 : $"{remaining.Seconds}s left"
-        : string.Empty;
+        : DescribeWait();
+
+    /// <summary>Describes how long the engine will keep waiting.</summary>
+    /// <returns>The countdown, or empty when nothing is being timed.</returns>
+    private string DescribeWait()
+    {
+        if (Job.StalledFor is not { } stalled)
+        {
+            return string.Empty;
+        }
+
+        if (Job.StallLimit is not { } limit)
+        {
+            // No deadline to count down, so the honest thing is the length of the
+            // silence. Still far better than the blank this used to be.
+            return stalled.TotalMinutes >= 1
+                ? $"stalled {(int)stalled.TotalMinutes}m {stalled.Seconds}s"
+                : $"stalled {stalled.Seconds}s";
+        }
+
+        var left = limit - stalled;
+
+        return left <= TimeSpan.Zero
+            ? "giving up"
+            : left.TotalMinutes >= 1
+                ? $"waiting, {(int)left.TotalMinutes}m {left.Seconds}s left"
+                : $"waiting, {left.Seconds}s left";
+    }
 
     /// <summary>Gets the connection counts, as text.</summary>
     /// <remarks>
